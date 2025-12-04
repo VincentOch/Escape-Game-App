@@ -1,0 +1,891 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Play, Lock, Settings, Plus, Trash2, Save, Image as ImageIcon, 
+  Clock, HelpCircle, CheckCircle, AlertCircle, Share2, Upload, FileJson, 
+  X, Copy, Edit3, ArrowUp, ArrowDown, Layout, Wrench, Eye, AlertTriangle, 
+  MessageSquare, BookOpen, Flag
+} from 'lucide-react';
+
+// --- Utilitaires ---
+
+const compressImage = (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); 
+      };
+    };
+  });
+};
+
+const normalizeText = (text) => {
+  if (!text) return "";
+  return text
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+    .toLowerCase()
+    .trim();
+};
+
+const encodeGameData = (data) => {
+  try { return btoa(encodeURIComponent(JSON.stringify(data))); } 
+  catch (e) { return null; }
+};
+
+const decodeGameData = (hash) => {
+  try { return JSON.parse(decodeURIComponent(atob(hash))); } 
+  catch (e) { return null; }
+};
+
+// --- Composants UI ---
+
+const Modal = ({ isOpen, title, children, onConfirm, onCancel, confirmText = "Valider", confirmColor = "bg-emerald-600" }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl scale-100 animate-scale-in max-h-[90vh] overflow-y-auto">
+        <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
+        <div className="text-zinc-300 mb-6">{children}</div>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 py-3 rounded-xl bg-zinc-800 font-bold text-zinc-400 hover:text-white transition-colors">Annuler</button>
+          <button onClick={onConfirm} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-lg ${confirmColor} hover:brightness-110 transition-all`}>{confirmText}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ImageGallery = ({ images, onZoom }) => {
+  if (!images || images.length === 0) return null;
+  return (
+    <div className="w-full relative group animate-fade-in my-2">
+      <div className={`flex gap-2 ${images.length > 1 ? 'overflow-x-auto pb-2 snap-x' : 'justify-center'}`}>
+        {images.map((imgObj, idx) => {
+          // Gestion rétrocompatibilité (si img est string)
+          const src = typeof imgObj === 'string' ? imgObj : imgObj.url;
+          return (
+            <div key={idx} className={`relative shrink-0 ${images.length > 1 ? 'w-full snap-center' : 'w-full'}`}>
+              <img 
+                src={src} 
+                alt={`Visuel ${idx + 1}`} 
+                className="w-full h-56 object-contain bg-black/40 rounded-xl border border-zinc-700/50 shadow-xl" 
+                onClick={() => onZoom(src)} 
+              />
+              <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded-lg text-white pointer-events-none backdrop-blur-sm"><Eye size={14} /></div>
+            </div>
+          );
+        })}
+      </div>
+      {images.length > 1 && <div className="text-center text-xs text-zinc-500 mt-1">↔ Glissez pour voir les autres photos</div>}
+    </div>
+  );
+};
+
+const Confetti = () => {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const particles = [];
+    const colors = ['#34D399', '#60A5FA', '#F472B6', '#FBBF24', '#A78BFA'];
+    for(let i=0; i<100; i++) {
+      particles.push({
+        x: window.innerWidth / 2, y: window.innerHeight / 2,
+        vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10 - 5,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: Math.random() * 8 + 4, life: 100
+      });
+    }
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let active = false;
+      particles.forEach(p => {
+        if(p.life > 0) {
+          active = true;
+          p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life--; p.size *= 0.96;
+          ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        }
+      });
+      if(active) requestAnimationFrame(animate);
+    };
+    animate();
+  }, []);
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-50" />;
+};
+
+// --- Composants Admin (Extraits pour éviter le re-render bug) ---
+
+const ConfigSection = ({ settings, setSettings, title, contentField, titleField, imagesField, placeholderTitle, placeholderContent }) => {
+  
+  const addSettingImage = async (file) => {
+    if(file) {
+      const base64 = await compressImage(file);
+      setSettings({...settings, [imagesField]: [...(settings[imagesField] || []), base64]});
+    }
+  };
+
+  const addSettingImageUrl = (url) => {
+    if(url) setSettings({...settings, [imagesField]: [...(settings[imagesField] || []), url]});
+  };
+
+  const removeSettingImage = (idx) => {
+    setSettings({...settings, [imagesField]: settings[imagesField].filter((_, i) => i !== idx)});
+  };
+
+  return (
+     <div className="space-y-4 bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-zinc-500 font-bold uppercase text-xs">{title}</span>
+          </div>
+          <input className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg text-white font-bold" value={settings[titleField]} onChange={e => setSettings({...settings, [titleField]: e.target.value})} placeholder={placeholderTitle} />
+          <textarea className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg text-white" rows={4} value={settings[contentField]} onChange={e => setSettings({...settings, [contentField]: e.target.value})} placeholder={placeholderContent} />
+          
+          <div>
+            <label className="block text-xs text-zinc-500 mb-2">Images de la page</label>
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
+              {(settings[imagesField] || []).map((img, idx) => (
+                <div key={idx} className="w-16 h-16 bg-black rounded border border-zinc-700 overflow-hidden relative shrink-0">
+                  <img src={img} className="w-full h-full object-cover" />
+                  <button onClick={() => removeSettingImage(idx)} className="absolute top-0 right-0 bg-red-600 p-0.5 text-white"><X size={10}/></button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <label className="bg-zinc-800 p-2 rounded border border-zinc-700 cursor-pointer"><Upload size={16}/><input type="file" className="hidden" onChange={(e) => addSettingImage(e.target.files[0])} /></label>
+              <input className="flex-1 bg-zinc-950 border border-zinc-800 p-2 rounded text-xs" placeholder="Ajouter URL + Entrée" onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value) { addSettingImageUrl(e.target.value); e.target.value=''; }}} />
+            </div>
+          </div>
+     </div>
+  );
+};
+
+// --- Composant Principal ---
+export default function App() {
+  const [view, setView] = useState('home'); 
+  const [pages, setPages] = useState([]);
+  const [settings, setSettings] = useState({
+    scenarioTitle: "Scénario Inconnu",
+    introTitle: "Introduction",
+    introContent: "Bienvenue. Cliquez sur commencer pour lancer le chrono.",
+    introImages: [],
+    victoryTitle: "Félicitations !",
+    victoryContent: "Vous avez terminé l'aventure.",
+    victoryImages: [],
+    adminPassword: "admin", 
+    initialTime: 3600,
+  });
+
+  const [gameState, setGameState] = useState({
+    currentPageIndex: 0,
+    timer: 3600,
+    isRunning: false,
+    penaltyTotal: 0,
+    hintsUnlocked: [],
+    answersUnlocked: [],
+    showConfetti: false
+  });
+
+  const [isScenarioLoaded, setIsScenarioLoaded] = useState(false);
+
+  // Chargement & Migration
+  useEffect(() => {
+    const loadGame = (data) => {
+      if (data?.settings && data?.pages) {
+        // Migration images string -> object {url, type}
+        const migratedPages = data.pages.map(p => {
+          let imgs = p.images || (p.imageUrl ? [p.imageUrl] : []);
+          // Normalisation: Convertir string en objet si nécessaire
+          imgs = imgs.map(img => typeof img === 'string' ? { url: img, type: 'puzzle' } : img);
+          
+          return {
+            ...p,
+            images: imgs,
+            solutionPenalty: p.solutionPenalty || (p.hintPenalty ? p.hintPenalty * 2 : 120)
+          };
+        });
+        
+        const newSettings = {
+          ...settings,
+          ...data.settings,
+        };
+
+        setSettings(newSettings);
+        setPages(migratedPages);
+        setIsScenarioLoaded(true);
+      }
+    };
+
+    const hash = window.location.hash.substring(1);
+    if (hash) {
+      const sharedGame = decodeGameData(hash);
+      if(sharedGame) {
+        loadGame(sharedGame);
+        window.history.replaceState(null, null, ' ');
+        return;
+      }
+    }
+    const savedData = localStorage.getItem('escapeGameDraft');
+    if (savedData) {
+      try { loadGame(JSON.parse(savedData)); } catch (e) {}
+    }
+  }, []);
+
+  // Sauvegarde
+  useEffect(() => {
+    if (view !== 'game' && view !== 'finish' && view !== 'intro') {
+      localStorage.setItem('escapeGameDraft', JSON.stringify({ settings, pages }));
+    }
+  }, [settings, pages, view]);
+
+  // Timer
+  useEffect(() => {
+    let interval = null;
+    if (gameState.isRunning && gameState.timer > 0) {
+      interval = setInterval(() => {
+        setGameState(prev => {
+          if (prev.timer <= 1) {
+            setView('finish');
+            return { ...prev, timer: 0, isRunning: false };
+          }
+          return { ...prev, timer: prev.timer - 1 };
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [gameState.isRunning, gameState.timer]);
+
+  // Actions
+  const goToIntro = () => {
+    if (pages.length === 0) return alert("Aucun scénario chargé. Créez-en un ou importez un JSON.");
+    setView('intro');
+  };
+
+  const startGame = () => {
+    setGameState({ 
+      currentPageIndex: 0, 
+      timer: settings.initialTime, 
+      isRunning: true, 
+      penaltyTotal: 0,
+      hintsUnlocked: [],
+      answersUnlocked: [],
+      showConfetti: false
+    });
+    setView('game');
+  };
+
+  const handleCorrectAnswer = () => {
+    setGameState(prev => ({ ...prev, showConfetti: true }));
+    setTimeout(() => {
+      setGameState(prev => {
+        const nextIndex = prev.currentPageIndex + 1;
+        const finished = nextIndex >= pages.length;
+        if (finished) setView('finish');
+        return { 
+          ...prev, 
+          showConfetti: false,
+          currentPageIndex: finished ? prev.currentPageIndex : nextIndex,
+          isRunning: !finished
+        };
+      });
+    }, 2000);
+  };
+
+  const handleImportJson = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.settings && data.pages) {
+          // Migration à l'import
+          const migratedPages = data.pages.map(p => {
+            let imgs = p.images || (p.imageUrl ? [p.imageUrl] : []);
+            imgs = imgs.map(img => typeof img === 'string' ? { url: img, type: 'puzzle' } : img);
+            return {
+              ...p,
+              images: imgs,
+              solutionPenalty: p.solutionPenalty || 120
+            };
+          });
+
+          setSettings({...settings, ...data.settings});
+          setPages(migratedPages);
+          setIsScenarioLoaded(true);
+          alert("Scénario chargé !");
+        }
+      } catch (err) { alert("Fichier invalide"); }
+    };
+    reader.readAsText(file);
+  };
+
+  const unlockHint = (pageId, penalty) => {
+    setGameState(prev => ({ ...prev, hintsUnlocked: [...prev.hintsUnlocked, pageId], timer: Math.max(0, prev.timer - penalty), penaltyTotal: prev.penaltyTotal + penalty }));
+  };
+
+  const unlockAnswer = (pageId, penalty) => {
+    setGameState(prev => ({ ...prev, answersUnlocked: [...prev.answersUnlocked, pageId], timer: Math.max(0, prev.timer - penalty), penaltyTotal: prev.penaltyTotal + penalty }));
+  };
+
+  const applyWrongAnswerPenalty = (penalty) => {
+    setGameState(prev => ({ ...prev, timer: Math.max(0, prev.timer - penalty), penaltyTotal: prev.penaltyTotal + penalty }));
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-900 text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden pb-10">
+      {gameState.showConfetti && <Confetti />}
+      
+      {view === 'home' && (
+        <HomeView settings={settings} isScenarioLoaded={isScenarioLoaded} onStart={goToIntro} onAdmin={() => setView('adminLogin')} onImport={handleImportJson} />
+      )}
+      {view === 'intro' && (
+        <IntroView settings={settings} onStartGame={startGame} onBack={() => setView('home')} />
+      )}
+      {view === 'game' && pages.length > 0 && (
+        <GameView 
+          page={pages[gameState.currentPageIndex]} 
+          gameState={gameState}
+          onCorrectAnswer={handleCorrectAnswer}
+          onUnlockHint={unlockHint}
+          onUnlockAnswer={unlockAnswer}
+          onWrongAnswer={applyWrongAnswerPenalty}
+          totalSteps={pages.length}
+        />
+      )}
+      {view === 'finish' && (
+        <FinishView settings={settings} timer={gameState.timer} penalty={gameState.penaltyTotal} isWin={gameState.timer > 0} onHome={() => setView('home')} />
+      )}
+      {view === 'adminLogin' && (
+        <AdminLogin password={settings.adminPassword} onSuccess={() => setView('adminDashboard')} onCancel={() => setView('home')} />
+      )}
+      {view === 'adminDashboard' && (
+        <AdminDashboard settings={settings} setSettings={setSettings} pages={pages} setPages={setPages} onExit={() => setView('home')} setIsScenarioLoaded={setIsScenarioLoaded} />
+      )}
+    </div>
+  );
+}
+
+// --- VUES ---
+
+function HomeView({ settings, isScenarioLoaded, onStart, onAdmin, onImport }) {
+  return (
+    <div className="flex flex-col items-center min-h-screen p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-800 via-zinc-900 to-black">
+      <div className="flex-1 flex flex-col justify-center w-full max-w-md space-y-8 animate-fade-in-up">
+        <div className="text-center space-y-4">
+          <div className="inline-block p-3 rounded-full bg-indigo-500/10 mb-2">
+            <Lock size={48} className="text-indigo-400" />
+          </div>
+          <h1 className="text-3xl font-bold text-white drop-shadow-lg">
+            Mon Escape Game
+          </h1>
+          {isScenarioLoaded ? (
+             <div className="bg-zinc-800/80 border border-zinc-700 p-4 rounded-xl">
+               <span className="text-xs text-zinc-500 uppercase font-bold">Scénario chargé</span>
+               <h2 className="text-xl md:text-2xl font-bold text-emerald-400 mt-1 break-words">{settings.scenarioTitle}</h2>
+             </div>
+          ) : (
+            <div className="bg-zinc-800/50 border border-zinc-700 border-dashed p-4 rounded-xl text-zinc-500 text-sm">
+              <AlertTriangle className="mx-auto mb-2 text-amber-500" />
+              Aucun scénario. Veuillez importer un fichier JSON.
+            </div>
+          )}
+        </div>
+        
+        <button 
+          onClick={onStart} 
+          disabled={!isScenarioLoaded}
+          className={`group relative w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center ${isScenarioLoaded ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20 active:scale-[0.98]' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+        >
+          <Play className="mr-3 h-6 w-6 fill-current" />
+          <span className="text-lg tracking-widest">COMMENCER</span>
+        </button>
+
+        <div className="border-t border-zinc-800 pt-6 mt-4">
+           <label className="flex items-center justify-center w-full py-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg cursor-pointer transition-colors border border-dashed border-zinc-700">
+              <Upload className="mr-2 h-4 w-4 text-zinc-400" />
+              <span className="text-sm text-zinc-400">Importer un scénario (.json)</span>
+              <input type="file" accept=".json" onChange={onImport} className="hidden" />
+           </label>
+        </div>
+      </div>
+
+      <button onClick={onAdmin} className="mt-8 mb-4 flex items-center text-zinc-500 hover:text-white transition-colors bg-zinc-800/50 px-4 py-2 rounded-full border border-zinc-700/50">
+        <Wrench size={16} className="mr-2" />
+        <span className="text-sm font-medium">Mode Créateur / Admin</span>
+      </button>
+    </div>
+  );
+}
+
+function IntroView({ settings, onStartGame, onBack }) {
+  const [zoomedImage, setZoomedImage] = useState(null);
+  
+  return (
+    <div className="min-h-screen bg-zinc-950 p-6 flex flex-col items-center justify-center">
+      <div className="w-full max-w-lg space-y-6 animate-fade-in-up">
+        <div className="flex items-center justify-between">
+           <button onClick={onBack} className="text-zinc-500 hover:text-white"><X /></button>
+           <div className="text-xs font-mono text-zinc-600">INTRODUCTION</div>
+           <div className="w-6"></div>
+        </div>
+
+        <ImageGallery images={settings.introImages} onZoom={setZoomedImage} />
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center space-y-4 shadow-xl">
+           <h1 className="text-2xl font-bold text-white break-words">{settings.introTitle}</h1>
+           <div className="max-h-60 overflow-y-auto px-2 scrollbar-thin scrollbar-thumb-zinc-700">
+              <p className="text-zinc-300 whitespace-pre-wrap break-words leading-relaxed max-w-[80%] mx-auto">{settings.introContent}</p>
+           </div>
+        </div>
+
+        <button onClick={onStartGame} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center">
+          <Clock className="mr-2" /> LANCER LE CHRONO
+        </button>
+      </div>
+      
+      {zoomedImage && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-2" onClick={() => setZoomedImage(null)}>
+           <img src={zoomedImage} className="max-w-full max-h-full object-contain" alt="Zoom" />
+           <button className="absolute top-6 right-6 bg-zinc-800 p-2 rounded-full text-white"><X size={24} /></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GameView({ page, gameState, onCorrectAnswer, onUnlockHint, onUnlockAnswer, onWrongAnswer, totalSteps }) {
+  const [input, setInput] = useState('');
+  const [errorShake, setErrorShake] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState(null);
+  const [modalType, setModalType] = useState(null); 
+
+  const isHintUnlocked = gameState.hintsUnlocked.includes(page.id);
+  const isAnswerUnlocked = gameState.answersUnlocked.includes(page.id);
+  const currentStep = gameState.currentPageIndex + 1;
+  
+  // Séparation des images Lore (Haut) et Puzzle (Bas)
+  const images = page.images || [];
+  const loreImages = images.filter(img => img.type === 'lore');
+  const puzzleImages = images.filter(img => img.type !== 'lore'); // Default to puzzle
+
+  useEffect(() => { setInput(''); setErrorShake(false); setZoomedImage(null); setModalType(null); }, [page.id]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    
+    if (normalizeText(input) === normalizeText(page.answer)) {
+      onCorrectAnswer();
+    } else {
+      setErrorShake(true); 
+      setTimeout(() => setErrorShake(false), 500);
+      const penalty = page.wrongPenalty || 60;
+      onWrongAnswer(penalty);
+      alert(`Mauvaise réponse ! -${penalty} secondes`);
+    }
+  };
+
+  const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+
+  return (
+    <div className="flex flex-col min-h-screen pb-6 bg-zinc-900">
+      <div className="bg-zinc-800/90 backdrop-blur-sm p-4 flex justify-between items-center sticky top-0 z-10 shadow-lg border-b border-zinc-700">
+        <span className="bg-zinc-700 text-zinc-300 px-3 py-1 rounded-full text-xs font-bold font-mono">{currentStep} / {totalSteps}</span>
+        <div className={`font-mono text-xl font-bold flex items-center ${gameState.timer < 300 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
+          <Clock className="mr-2 h-5 w-5" /> {formatTime(gameState.timer)}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center p-6 w-full max-w-lg mx-auto space-y-6">
+        
+        {/* IMAGES LORE (HAUT) */}
+        {loreImages.length > 0 && <ImageGallery images={loreImages} onZoom={setZoomedImage} />}
+
+        <div className="w-full text-center space-y-2 animate-fade-in-up flex flex-col min-h-0">
+          <h2 className="text-2xl font-bold text-white break-words">{page.title}</h2>
+          <div className="max-h-60 overflow-y-auto px-2 py-1 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+             <p className="text-zinc-400 whitespace-pre-wrap break-words leading-relaxed text-base max-w-[80%] mx-auto">{page.content}</p>
+          </div>
+        </div>
+
+        {/* IMAGES PUZZLE (BAS) */}
+        {puzzleImages.length > 0 && <ImageGallery images={puzzleImages} onZoom={setZoomedImage} />}
+
+        <form onSubmit={handleSubmit} className="w-full space-y-4 mt-auto">
+          <input 
+            type="text" 
+            value={input} 
+            onChange={(e) => setInput(e.target.value)} 
+            placeholder="Votre réponse..." 
+            className={`w-full bg-zinc-950 border-2 ${errorShake ? 'border-red-500 animate-shake' : 'border-zinc-800 focus:border-emerald-500'} rounded-xl py-4 px-4 text-center text-lg outline-none transition-all text-white placeholder:text-zinc-600`} 
+          />
+          <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all">
+            VALIDER
+          </button>
+        </form>
+
+        <div className="w-full pt-2 flex flex-col gap-3">
+          <button 
+            type="button"
+            onClick={() => isHintUnlocked ? null : setModalType('hint')}
+            className={`w-full py-3 rounded-lg text-sm flex items-center justify-center transition-colors ${
+              isHintUnlocked 
+                ? "bg-amber-900/20 text-amber-200 border border-amber-500/30 cursor-default" 
+                : "text-amber-500/70 hover:text-amber-400 border border-transparent hover:border-amber-500/20"
+            }`}
+          >
+            {isHintUnlocked ? (
+              <div className="text-center">
+                 <span className="font-bold block mb-1 uppercase text-xs tracking-wider text-amber-500">Indice Débloqué</span>
+                 <p className="break-words max-w-[90%] mx-auto">{page.hint}</p>
+              </div>
+            ) : (
+              <>
+                 <HelpCircle className="mr-2 h-4 w-4" /> Besoin d'un indice ? (-{page.hintPenalty || 60}s)
+              </>
+            )}
+          </button>
+
+          {isHintUnlocked && (
+             <button 
+             type="button"
+             onClick={() => isAnswerUnlocked ? null : setModalType('answer')}
+             className={`w-full py-2 rounded-lg text-xs flex items-center justify-center transition-colors ${
+               isAnswerUnlocked
+                 ? "bg-red-900/20 text-red-200 border border-red-500/30 cursor-default" 
+                 : "text-red-500/70 hover:text-red-400 border border-transparent hover:border-red-500/20"
+             }`}
+           >
+             {isAnswerUnlocked ? (
+               <div className="text-center">
+                  <span className="font-bold block uppercase text-[10px] tracking-wider text-red-500">Solution</span>
+                  La réponse est : <span className="font-mono font-bold">{page.answer}</span>
+               </div>
+             ) : (
+               <>
+                  <Lock className="mr-2 h-3 w-3" /> Bloqué ? Révéler la réponse (-{page.solutionPenalty || 120}s)
+               </>
+             )}
+           </button>
+          )}
+        </div>
+      </div>
+
+      <Modal 
+        isOpen={modalType === 'hint'} 
+        title="Débloquer l'indice ?" 
+        confirmText={`Oui, perdre ${page.hintPenalty || 60}s`}
+        confirmColor="bg-amber-600"
+        onCancel={() => setModalType(null)}
+        onConfirm={() => { onUnlockHint(page.id, page.hintPenalty || 60); setModalType(null); }}
+      >
+        <p>Êtes-vous sûr de vouloir un indice ? Cela retirera du temps à votre chrono.</p>
+      </Modal>
+
+      <Modal 
+        isOpen={modalType === 'answer'} 
+        title="Abandonner cette étape ?" 
+        confirmText={`Révéler (-${page.solutionPenalty || 120}s)`} 
+        confirmColor="bg-red-600"
+        onCancel={() => setModalType(null)}
+        onConfirm={() => { onUnlockAnswer(page.id, page.solutionPenalty || 120); setModalType(null); }}
+      >
+        <p>Cela affichera la réponse exacte mais vous coûtera une pénalité fixe.</p>
+      </Modal>
+
+      {zoomedImage && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-2" onClick={() => setZoomedImage(null)}>
+           <img src={zoomedImage} className="max-w-full max-h-full object-contain" alt="Zoom" />
+           <button className="absolute top-6 right-6 bg-zinc-800 p-2 rounded-full text-white"><X size={24} /></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminDashboard({ settings, setSettings, pages, setPages, onExit, setIsScenarioLoaded }) {
+  const [tab, setTab] = useState('settings'); 
+  const [editingPage, setEditingPage] = useState(null);
+  
+  const handleNewScenario = () => {
+    if(confirm("Créer un nouveau scénario vierge ? (Exportez l'actuel avant si besoin)")) {
+      setPages([]);
+      setSettings({...settings, scenarioTitle: "Nouveau Scénario", introTitle: "Intro", introContent:"", introImages:[], victoryTitle:"Victoire", victoryContent:"", victoryImages:[]});
+      setIsScenarioLoaded(true);
+    }
+  };
+  
+  const handleExportJson = () => {
+    const data = JSON.stringify({ settings, pages }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeTitle = (settings.scenarioTitle || "Scenario").replace(/[^a-z0-9]/gi, '_');
+    a.download = `${safeTitle} Escape Game.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePageImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const base64 = await compressImage(file);
+        setEditingPage({...editingPage, images: [...(editingPage.images || []), { url: base64, type: 'puzzle' }]});
+      } catch (err) { alert("Erreur upload"); }
+    }
+  };
+
+  const addPageImageUrl = (url) => {
+    if(url) setEditingPage({...editingPage, images: [...(editingPage.images || []), { url: url, type: 'puzzle' }]});
+  };
+
+  const toggleImageType = (idx) => {
+    const newImages = [...editingPage.images];
+    newImages[idx].type = newImages[idx].type === 'lore' ? 'puzzle' : 'lore';
+    setEditingPage({...editingPage, images: newImages});
+  };
+
+  const movePage = (index, direction) => {
+    const newPages = [...pages];
+    if (direction === -1 && index > 0) {
+      [newPages[index], newPages[index-1]] = [newPages[index-1], newPages[index]];
+    } else if (direction === 1 && index < newPages.length - 1) {
+      [newPages[index], newPages[index+1]] = [newPages[index+1], newPages[index]];
+    }
+    setPages(newPages);
+  };
+
+  if (editingPage) {
+    const images = editingPage.images || [];
+    return (
+      <div className="min-h-screen bg-zinc-950 p-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white flex items-center"><Edit3 className="mr-2 text-indigo-400"/> {editingPage.id ? 'Modifier' : 'Ajouter'} Niveau</h2>
+            <button onClick={() => setEditingPage(null)} className="text-zinc-400 hover:text-white"><X /></button>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
+              <div className="flex items-center text-indigo-400 text-sm font-bold uppercase tracking-wider mb-2"><Layout size={16} className="mr-2"/> Visuel</div>
+              <input className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-lg text-white" placeholder="Titre du niveau" value={editingPage.title} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
+              <textarea rows={4} className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-lg text-white" placeholder="Contenu de l'énigme..." value={editingPage.content} onChange={e => setEditingPage({...editingPage, content: e.target.value})} />
+              
+              <div>
+                <label className="block text-xs text-zinc-500 mb-2">Galerie Images</label>
+                <div className="flex flex-col gap-3">
+                   {images.length > 0 && (
+                     <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
+                       {images.map((imgObj, idx) => (
+                         <div key={idx} className="w-24 bg-black rounded border border-zinc-700 overflow-hidden relative shrink-0 snap-start flex flex-col">
+                           <div className="h-20 w-full relative">
+                             <img src={imgObj.url} className="w-full h-full object-cover" alt="miniature" />
+                             <button onClick={() => setEditingPage({...editingPage, images: images.filter((_, i) => i !== idx)})} className="absolute top-0 right-0 bg-red-600 p-0.5 text-white hover:bg-red-500"><X size={12}/></button>
+                           </div>
+                           <button 
+                             onClick={() => toggleImageType(idx)}
+                             className={`text-[10px] uppercase font-bold py-1 w-full flex items-center justify-center gap-1 ${imgObj.type === 'lore' ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}
+                           >
+                             {imgObj.type === 'lore' ? <ArrowUp size={10}/> : <ArrowDown size={10}/>}
+                             {imgObj.type === 'lore' ? 'Lore' : 'Enigme'}
+                           </button>
+                         </div>
+                       ))}
+                     </div>
+                   )}
+                   <div className="flex gap-2">
+                     <label className="flex-1 bg-zinc-800 hover:bg-zinc-700 p-3 rounded-lg cursor-pointer border border-zinc-700 text-zinc-300 flex items-center justify-center">
+                       <Upload size={16} className="mr-2" /><span className="text-xs">Uploader</span>
+                       <input type="file" accept="image/*" className="hidden" onChange={handlePageImageUpload} />
+                     </label>
+                     <div className="flex-[2] relative">
+                       <input className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-lg text-zinc-300 text-xs pr-10" placeholder="Ajouter URL + Entrée" 
+                          onKeyDown={(e) => {
+                            if(e.key === 'Enter' && e.target.value) {
+                               addPageImageUrl(e.target.value);
+                               e.target.value = '';
+                            }
+                          }}
+                       />
+                       <Plus size={16} className="absolute right-3 top-3 text-zinc-500 pointer-events-none"/>
+                     </div>
+                   </div>
+                   <p className="text-[10px] text-zinc-500">* "Lore" affiche l'image avant le texte. "Enigme" l'affiche après.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
+              <div className="flex items-center text-emerald-500 text-sm font-bold uppercase tracking-wider mb-2"><Lock size={16} className="mr-2"/> Solutions</div>
+              <input className="w-full bg-zinc-950 border border-emerald-900/50 p-3 rounded-lg text-white" placeholder="Réponse attendue" value={editingPage.answer} onChange={e => setEditingPage({...editingPage, answer: e.target.value})} />
+              <input className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-lg text-white" placeholder="Texte de l'indice" value={editingPage.hint} onChange={e => setEditingPage({...editingPage, hint: e.target.value})} />
+              
+              <div className="grid grid-cols-3 gap-2">
+                <div><label className="block text-[10px] text-amber-500 mb-1">Coût Indice</label><input type="number" className="w-full bg-zinc-950 border border-zinc-700 p-2 rounded-lg text-white text-center" value={editingPage.hintPenalty} onChange={e => setEditingPage({...editingPage, hintPenalty: parseInt(e.target.value) || 0})} /></div>
+                <div><label className="block text-[10px] text-red-500 mb-1">Coût Solution</label><input type="number" className="w-full bg-zinc-950 border border-zinc-700 p-2 rounded-lg text-white text-center" value={editingPage.solutionPenalty} onChange={e => setEditingPage({...editingPage, solutionPenalty: parseInt(e.target.value) || 0})} /></div>
+                <div><label className="block text-[10px] text-red-400 mb-1">Coût Erreur</label><input type="number" className="w-full bg-zinc-950 border border-zinc-700 p-2 rounded-lg text-white text-center" value={editingPage.wrongPenalty} onChange={e => setEditingPage({...editingPage, wrongPenalty: parseInt(e.target.value) || 0})} /></div>
+              </div>
+            </div>
+            
+            <div className="pt-2 pb-10 flex gap-3">
+               <button onClick={() => setEditingPage(null)} className="flex-1 py-4 rounded-xl bg-zinc-800 font-bold text-zinc-400">Annuler</button>
+               <button onClick={() => {
+                 const newP = editingPage.id ? editingPage : { ...editingPage, id: Date.now() };
+                 setPages(prev => editingPage.id ? prev.map(p => p.id === newP.id ? newP : p) : [...prev, newP]);
+                 setEditingPage(null);
+               }} className="flex-1 py-4 rounded-xl bg-indigo-600 font-bold text-white">Sauvegarder</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen bg-zinc-950 text-white">
+      <div className="bg-zinc-900 border-b border-zinc-800 p-4 sticky top-0 z-20 flex justify-between items-center shadow-lg">
+        <h2 className="font-bold flex items-center text-indigo-400"><Wrench className="mr-2" size={20}/> ADMIN</h2>
+        <button onClick={onExit} className="text-xs bg-zinc-800 px-3 py-2 rounded-lg hover:bg-zinc-700">Quitter</button>
+      </div>
+
+      <div className="flex p-2 gap-1 bg-zinc-950 sticky top-[65px] z-10 overflow-x-auto">
+        <TabButton active={tab === 'settings'} onClick={() => setTab('settings')} icon={Settings} label="Scénario" />
+        <TabButton active={tab === 'intro'} onClick={() => setTab('intro')} icon={BookOpen} label="Intro" />
+        <TabButton active={tab === 'levels'} onClick={() => setTab('levels')} icon={Layout} label="Niveaux" />
+        <TabButton active={tab === 'victory'} onClick={() => setTab('victory')} icon={Flag} label="Victoire" />
+        <TabButton active={tab === 'export'} onClick={() => setTab('export')} icon={Share2} label="Export" />
+      </div>
+
+      <div className="p-4 flex-1 overflow-y-auto max-w-2xl mx-auto w-full pb-20">
+        
+        {tab === 'settings' && (
+           <div className="space-y-4 bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+             <div><label className="text-xs text-zinc-500 font-bold uppercase">Nom du Scénario</label><input className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg mt-1" value={settings.scenarioTitle} onChange={e => setSettings({...settings, scenarioTitle: e.target.value})} /></div>
+             <div className="grid grid-cols-2 gap-4">
+               <div><label className="text-xs text-zinc-500 font-bold uppercase">Temps (s)</label><input type="number" className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg mt-1" value={settings.initialTime} onChange={e => setSettings({...settings, initialTime: parseInt(e.target.value)})} /></div>
+               <div><label className="text-xs text-zinc-500 font-bold uppercase">Mdp Admin</label><input className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg mt-1" value={settings.adminPassword} onChange={e => setSettings({...settings, adminPassword: e.target.value})} /></div>
+             </div>
+           </div>
+        )}
+
+        {/* Utilisation des composants extraits */}
+        {tab === 'intro' && <ConfigSection settings={settings} setSettings={setSettings} title="Introduction" titleField="introTitle" contentField="introContent" imagesField="introImages" placeholderTitle="Titre Intro" placeholderContent="Texte d'introduction..." />}
+        {tab === 'victory' && <ConfigSection settings={settings} setSettings={setSettings} title="Victoire" titleField="victoryTitle" contentField="victoryContent" imagesField="victoryImages" placeholderTitle="Titre Victoire" placeholderContent="Message de fin..." />}
+
+        {tab === 'levels' && (
+          <div className="space-y-4">
+            {pages.map((p, i) => (
+              <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex items-center justify-between shadow-sm">
+                 <div className="flex items-center gap-3 overflow-hidden">
+                   <span className="bg-zinc-800 text-zinc-500 w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm shrink-0">{i+1}</span>
+                   <div className="min-w-0"><h3 className="font-bold truncate text-sm">{p.title || 'Sans titre'}</h3></div>
+                 </div>
+                 <div className="flex gap-1 items-center">
+                   <div className="flex flex-col mr-1">
+                     <button onClick={() => movePage(i, -1)} disabled={i === 0} className="text-zinc-600 hover:text-white disabled:opacity-20"><ArrowUp size={14}/></button>
+                     <button onClick={() => movePage(i, 1)} disabled={i === pages.length - 1} className="text-zinc-600 hover:text-white disabled:opacity-20"><ArrowDown size={14}/></button>
+                   </div>
+                   <button onClick={() => setEditingPage(p)} className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg"><Edit3 size={16}/></button>
+                   <button onClick={() => { if (confirm("Supprimer ?")) setPages(pages.filter(x => x.id !== p.id)); }} className="p-2 bg-red-500/10 text-red-400 rounded-lg"><Trash2 size={16}/></button>
+                 </div>
+              </div>
+            ))}
+            <button onClick={() => setEditingPage({ id: null, title:'', content:'', answer:'', hint:'', hintPenalty:60, solutionPenalty:120, wrongPenalty:60, images:[] })} className="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg z-30"><Plus size={28} /></button>
+          </div>
+        )}
+
+        {tab === 'export' && (
+          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center space-y-4">
+             <button onClick={handleExportJson} className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 rounded-lg font-bold flex items-center justify-center text-white"><FileJson className="mr-2" size={20}/> Exporter JSON</button>
+             <button onClick={handleNewScenario} className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 text-sm border border-zinc-700">Nouveau Scénario Vierge</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const TabButton = ({ active, onClick, icon: Icon, label }) => (
+  <button onClick={onClick} className={`flex-1 py-3 rounded-lg flex flex-col items-center justify-center text-[10px] uppercase font-bold transition-all ${active ? 'bg-indigo-600 text-white shadow-lg' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}>
+    <Icon size={18} className="mb-1" />{label}
+  </button>
+);
+
+function FinishView({ settings, isWin, timer, penalty, onHome }) {
+  const timeUsed = settings.initialTime - timer;
+  const [zoomedImage, setZoomedImage] = useState(null);
+
+  return (
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl relative">
+          <div className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center ${isWin ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+            {isWin ? <CheckCircle size={48} /> : <AlertCircle size={48} />}
+          </div>
+          
+          <div className="space-y-2">
+             <h2 className="text-2xl font-bold text-white">{isWin ? settings.victoryTitle : "Échec"}</h2>
+          </div>
+
+          <ImageGallery images={settings.victoryImages} onZoom={setZoomedImage} />
+
+          <div className="max-h-40 overflow-y-auto px-2 scrollbar-thin scrollbar-thumb-zinc-700">
+            <p className="text-zinc-400 text-sm whitespace-pre-wrap break-words leading-relaxed max-w-[80%] mx-auto">
+              {isWin && settings.victoryContent ? settings.victoryContent : (isWin ? "Bravo !" : "Temps écoulé.")}
+            </p>
+          </div>
+          
+          {isWin && (
+            <div className="bg-zinc-950 rounded-2xl p-4 space-y-2 border border-zinc-800/50 text-sm">
+              <div className="flex justify-between"><span className="text-zinc-500">Temps</span><span className="text-white font-mono">{Math.floor(timeUsed/60)}m {timeUsed%60}s</span></div>
+              <div className="flex justify-between"><span className="text-zinc-500">Pénalités</span><span className="text-red-400 font-mono">+{penalty}s</span></div>
+              <div className="h-px bg-zinc-800 my-2" />
+              <div className="flex justify-between font-bold"><span className="text-zinc-300">Total</span><span className="text-emerald-400 font-mono">{Math.floor((timeUsed + penalty)/60)}m {(timeUsed + penalty)%60}s</span></div>
+            </div>
+          )}
+          <button onClick={onHome} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-4 rounded-xl font-bold">Retour Menu</button>
+        </div>
+      </div>
+      {zoomedImage && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-2" onClick={() => setZoomedImage(null)}>
+           <img src={zoomedImage} className="max-w-full max-h-full object-contain" alt="Zoom" />
+           <button className="absolute top-6 right-6 bg-zinc-800 p-2 rounded-full text-white"><X size={24} /></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminLogin({ password, onSuccess, onCancel }) {
+  const [val, setVal] = useState('');
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-zinc-950">
+      <form onSubmit={(e) => { e.preventDefault(); if(val === password) onSuccess(); else alert('Mot de passe incorrect'); }} className="bg-zinc-900 border border-zinc-800 p-8 rounded-2xl w-full max-w-sm space-y-6 shadow-2xl">
+        <h2 className="text-xl font-bold text-white text-center">Zone Créateur</h2>
+        <input type="password" value={val} onChange={e => setVal(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-4 text-white text-center outline-none focus:border-indigo-500" placeholder="Mot de passe" autoFocus />
+        <div className="flex gap-3">
+          <button type="button" onClick={onCancel} className="flex-1 bg-zinc-800 py-3 rounded-xl font-bold text-zinc-400 hover:text-white">Annuler</button>
+          <button type="submit" className="flex-1 bg-indigo-600 py-3 rounded-xl text-white font-bold hover:bg-indigo-500">Entrer</button>
+        </div>
+      </form>
+    </div>
+  );
+}
