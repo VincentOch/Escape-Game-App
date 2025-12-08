@@ -8,35 +8,53 @@
     <!-- 1. STYLE -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 2. REACT & BABEL (VERSION GLOBALE / UMD) -->
-    <!-- Ces liens fonctionnent même en local via file:// -->
+    <!-- 2. REACT & BABEL -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        /* Styles et Animations */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOutUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
         @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        @keyframes shake { 
+            0%, 100% { transform: translateX(0); border-color: #3f3f46; } 
+            25% { transform: translateX(-5px); border-color: #ef4444; } 
+            75% { transform: translateX(5px); border-color: #ef4444; } 
+        }
         
         .animate-fade-in { animation: fadeIn 0.5s ease-out; }
-        .animate-fade-in-up { animation: fadeInUp 0.6s ease-out; }
+        .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
+        .animate-fade-out-up { animation: fadeOutUp 0.4s ease-in forwards; }
         .animate-scale-in { animation: scaleIn 0.3s ease-out; }
         .animate-shake { animation: shake 0.4s ease-in-out; }
         
         .scrollbar-thin::-webkit-scrollbar { width: 6px; }
         .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
         .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #3f3f46; border-radius: 20px; }
+
+        /* Styles pour le texte riche */
+        .rich-text b, .rich-text strong { font-weight: 700; color: #fff; }
+        .rich-text i, .rich-text em { font-style: italic; }
+        .rich-text u { text-decoration: underline; text-decoration-color: #a78bfa; text-decoration-thickness: 2px; }
+        
+        .rich-text font[color="#f87171"], .rich-text span[style*="rgb(248, 113, 113)"] { color: #f87171 !important; }
+        .rich-text font[color="#60a5fa"], .rich-text span[style*="rgb(96, 165, 250)"] { color: #60a5fa !important; }
+        .rich-text font[color="#4ade80"], .rich-text span[style*="rgb(74, 222, 128)"] { color: #4ade80 !important; }
+        .rich-text font[color="#facc15"], .rich-text span[style*="rgb(250, 204, 21)"] { color: #facc15 !important; }
+
+        /* Audio Player Customization */
+        audio { height: 36px; border-radius: 8px; width: 100%; }
+        audio::-webkit-media-controls-panel { background-color: #27272a; }
+        audio::-webkit-media-controls-current-time-display,
+        audio::-webkit-media-controls-time-remaining-display { color: #fff; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden">
     
-    <!-- Zone d'affichage des erreurs critiques -->
     <div id="error-display" class="hidden fixed inset-0 z-[9999] bg-red-900/95 text-white p-6 overflow-auto font-mono text-sm">
         <h2 class="text-2xl font-bold mb-4">Erreur technique</h2>
-        <p class="mb-4">Si vous voyez ceci, une erreur inattendue est survenue.</p>
         <button onclick="localStorage.clear(); window.location.reload();" class="bg-white text-red-900 px-4 py-2 rounded font-bold mb-4">Réinitialiser l'application</button>
         <div class="bg-black/50 p-4 rounded border border-red-500/50" id="error-log"></div>
     </div>
@@ -44,7 +62,6 @@
     <div id="root"></div>
 
     <script>
-        // Catch global errors
         window.onerror = function(message, source, lineno, colno, error) {
             const errorBox = document.getElementById('error-display');
             const errorLog = document.getElementById('error-log');
@@ -55,45 +72,51 @@
         };
     </script>
 
-    <!-- 3. CODE DE L'APPLICATION -->
     <script type="text/babel">
-        // Accès aux globales React
         const { useState, useEffect, useRef, Component } = React;
         const { createRoot } = ReactDOM;
 
-        // --- ICONES (Définition manuelle pour éviter les erreurs d'import) ---
+        // --- ICONES ---
         const IconBase = ({ children, size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
         );
-        
         const Icons = {
-            Play: (props) => <IconBase {...props}><polygon points="5 3 19 12 5 21 5 3"></polygon></IconBase>,
-            Lock: (props) => <IconBase {...props}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></IconBase>,
-            Settings: (props) => <IconBase {...props}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></IconBase>,
-            Plus: (props) => <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></IconBase>,
-            Trash2: (props) => <IconBase {...props}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></IconBase>,
-            Save: (props) => <IconBase {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></IconBase>,
-            Clock: (props) => <IconBase {...props}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></IconBase>,
-            HelpCircle: (props) => <IconBase {...props}><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></IconBase>,
-            CheckCircle: (props) => <IconBase {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></IconBase>,
-            AlertCircle: (props) => <IconBase {...props}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></IconBase>,
-            Share2: (props) => <IconBase {...props}><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></IconBase>,
-            Upload: (props) => <IconBase {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></IconBase>,
-            FileJson: (props) => <IconBase {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></IconBase>,
-            X: (props) => <IconBase {...props}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></IconBase>,
-            Copy: (props) => <IconBase {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconBase>,
-            Edit3: (props) => <IconBase {...props}><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></IconBase>,
-            ArrowUp: (props) => <IconBase {...props}><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></IconBase>,
-            ArrowDown: (props) => <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></IconBase>,
-            Layout: (props) => <IconBase {...props}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></IconBase>,
-            Wrench: (props) => <IconBase {...props}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></IconBase>,
-            Eye: (props) => <IconBase {...props}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></IconBase>,
-            AlertTriangle: (props) => <IconBase {...props}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></IconBase>,
-            BookOpen: (props) => <IconBase {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></IconBase>,
-            Flag: (props) => <IconBase {...props}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></IconBase>
+            Play: (p) => <IconBase {...p}><polygon points="5 3 19 12 5 21 5 3"></polygon></IconBase>,
+            Lock: (p) => <IconBase {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></IconBase>,
+            Settings: (p) => <IconBase {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></IconBase>,
+            Plus: (p) => <IconBase {...p}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></IconBase>,
+            Trash2: (p) => <IconBase {...p}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></IconBase>,
+            Save: (p) => <IconBase {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></IconBase>,
+            Clock: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></IconBase>,
+            HelpCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></IconBase>,
+            CheckCircle: (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></IconBase>,
+            AlertCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></IconBase>,
+            Share2: (p) => <IconBase {...p}><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></IconBase>,
+            Upload: (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></IconBase>,
+            FileJson: (p) => <IconBase {...p}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></IconBase>,
+            X: (p) => <IconBase {...p}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></IconBase>,
+            Copy: (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconBase>,
+            Edit3: (p) => <IconBase {...p}><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></IconBase>,
+            ArrowUp: (p) => <IconBase {...p}><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></IconBase>,
+            ArrowDown: (p) => <IconBase {...p}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></IconBase>,
+            Layout: (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></IconBase>,
+            Wrench: (p) => <IconBase {...p}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></IconBase>,
+            Eye: (p) => <IconBase {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></IconBase>,
+            AlertTriangle: (p) => <IconBase {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></IconBase>,
+            BookOpen: (p) => <IconBase {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></IconBase>,
+            Flag: (p) => <IconBase {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></IconBase>,
+            Bold: (p) => <IconBase {...p}><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></IconBase>,
+            Underline: (p) => <IconBase {...p}><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"></path><line x1="4" y1="21" x2="20" y2="21"></line></IconBase>,
+            Italic: (p) => <IconBase {...p}><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></IconBase>,
+            Palette: (p) => <IconBase {...p}><circle cx="13.5" cy="6.5" r=".5"></circle><circle cx="17.5" cy="10.5" r=".5"></circle><circle cx="8.5" cy="7.5" r=".5"></circle><circle cx="6.5" cy="12.5" r=".5"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></IconBase>,
+            Info: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></IconBase>,
+            Home: (p) => <IconBase {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></IconBase>,
+            Music: (p) => <IconBase {...p}><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></IconBase>,
+            ListChecks: (p) => <IconBase {...p}><path d="M10 6h11"></path><path d="M10 12h11"></path><path d="M10 18h11"></path><polyline points="3 6 4 7 6 5"></polyline><polyline points="3 12 4 13 6 11"></polyline><polyline points="3 18 4 19 6 17"></polyline></IconBase>,
+            ZoomIn: (p) => <IconBase {...p}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></IconBase>
         };
 
-        // --- Filet de Sécurité (Error Boundary) ---
+        // --- Filet de Sécurité ---
         class ErrorBoundary extends Component {
             constructor(props) {
                 super(props);
@@ -107,7 +130,7 @@
                             <Icons.AlertTriangle size={64} className="mb-4" />
                             <h1 className="text-2xl font-bold mb-2">Une erreur est survenue</h1>
                             <p className="mb-6 text-zinc-400 max-w-md bg-zinc-900 p-4 rounded text-xs font-mono text-left overflow-auto">{this.state.error?.toString()}</p>
-                            <button onClick={() => { localStorage.removeItem('escapeGameDraft'); window.location.reload(); }} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-500 transition-colors">Réinitialiser les données (Réparer)</button>
+                            <button onClick={() => { localStorage.removeItem('escape_game_v3_multianswer'); window.location.reload(); }} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-500 transition-colors">Réinitialiser les données</button>
                         </div>
                     );
                 }
@@ -137,9 +160,25 @@
             });
         };
 
+        const readFileAsBase64 = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        };
+
         const normalizeText = (text) => {
             if (!text) return "";
-            return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+            return text.toString()
+                .toLowerCase()
+                .replace(/œ/g, "oe")
+                .replace(/æ/g, "ae")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/ç/g, "c")
+                .trim();
         };
 
         const encodeGameData = (data) => {
@@ -151,7 +190,7 @@
         };
 
         // --- Composants UI ---
-        const Modal = ({ isOpen, title, children, onConfirm, onCancel, confirmText = "Valider", confirmColor = "bg-emerald-600" }) => {
+        const Modal = ({ isOpen, title, children, onConfirm, onCancel, confirmText = "Valider", confirmColor = "bg-emerald-600", cancelText = "Annuler" }) => {
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
@@ -159,10 +198,86 @@
                         <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
                         <div className="text-zinc-300 mb-6">{children}</div>
                         <div className="flex gap-3">
-                            <button onClick={onCancel} className="flex-1 py-3 rounded-xl bg-zinc-800 font-bold text-zinc-400 hover:text-white transition-colors">Annuler</button>
+                            {onCancel && <button onClick={onCancel} className="flex-1 py-3 rounded-xl bg-zinc-800 font-bold text-zinc-400 hover:text-white transition-colors">{cancelText}</button>}
                             <button onClick={onConfirm} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-lg ${confirmColor} hover:brightness-110 transition-all`}>{confirmText}</button>
                         </div>
                     </div>
+                </div>
+            );
+        };
+
+        const HtmlText = ({ content, className="" }) => {
+            const html = content
+                .replace(/\n/g, '<br/>')
+                .replace(/<b>(.*?)<\/b>/g, '<strong>$1</strong>')
+                .replace(/<u>(.*?)<\/u>/g, '<u>$1</u>')
+                .replace(/<span class="text-red">(.*?)<\/span>/g, '<span class="text-red">$1</span>')
+                .replace(/<span class="text-blue">(.*?)<\/span>/g, '<span class="text-blue">$1</span>')
+                .replace(/<span class="text-green">(.*?)<\/span>/g, '<span class="text-green">$1</span>')
+                .replace(/<span class="text-yellow">(.*?)<\/span>/g, '<span class="text-yellow">$1</span>');
+            return <div className={`rich-text ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
+        };
+
+        const RichTextEditor = ({ value, onChange, placeholder, rows=4 }) => {
+            const insertTag = (startTag, endTag) => {
+                const textarea = document.activeElement;
+                if (!textarea || textarea.tagName !== 'TEXTAREA') return;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const text = textarea.value;
+                const newValue = text.substring(0, start) + startTag + text.substring(start, end) + endTag + text.substring(end);
+                onChange({ target: { value: newValue } });
+                setTimeout(() => { textarea.focus(); textarea.setSelectionRange(start + startTag.length, end + startTag.length); }, 0);
+            };
+
+            return (
+                <div className="flex flex-col gap-1">
+                    <div className="flex gap-1 bg-zinc-900 p-1 rounded-t-lg border border-zinc-700 border-b-0">
+                        <button type="button" onClick={() => insertTag('<b>', '</b>')} className="p-1 hover:bg-zinc-700 rounded text-zinc-300 font-bold" title="Gras"><Icons.Bold size={16}/></button>
+                        <button type="button" onClick={() => insertTag('<i>', '</i>')} className="p-1 hover:bg-zinc-700 rounded text-zinc-300 italic" title="Italique"><Icons.Italic size={16}/></button>
+                        <button type="button" onClick={() => insertTag('<u>', '</u>')} className="p-1 hover:bg-zinc-700 rounded text-zinc-300 underline" title="Souligné"><Icons.Underline size={16}/></button>
+                        <div className="w-px bg-zinc-700 mx-1"></div>
+                        <button type="button" onClick={() => insertTag('<span class="text-red">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-red-500" title="Rouge"><div class="w-4 h-4 bg-red-500 rounded-full"></div></button>
+                        <button type="button" onClick={() => insertTag('<span class="text-blue">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-blue-400" title="Bleu"><div class="w-4 h-4 bg-blue-400 rounded-full"></div></button>
+                        <button type="button" onClick={() => insertTag('<span class="text-green">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-green-400" title="Vert"><div class="w-4 h-4 bg-green-400 rounded-full"></div></button>
+                        <button type="button" onClick={() => insertTag('<span class="text-yellow">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-yellow-400" title="Jaune"><div class="w-4 h-4 bg-yellow-400 rounded-full"></div></button>
+                    </div>
+                    <textarea className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-b-lg text-white font-sans text-sm focus:border-indigo-500 outline-none" rows={rows} value={value} onChange={onChange} placeholder={placeholder} />
+                </div>
+            );
+        };
+
+        // Improved Lightbox: Mobile friendly zoom/pan
+        const Lightbox = ({ src, onClose }) => {
+            const [scale, setScale] = useState(false);
+
+            return (
+                <div 
+                    className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center"
+                    onClick={onClose}
+                >
+                    {/* Scroll Container */}
+                    <div 
+                        className={`w-full h-full flex ${scale ? 'items-start justify-start overflow-auto' : 'items-center justify-center overflow-hidden'}`}
+                        onClick={(e) => { if(scale) e.stopPropagation(); }} // Allow scrolling without closing
+                    >
+                        <img 
+                            src={src} 
+                            className={`transition-all duration-300 ${
+                                scale 
+                                ? 'min-w-[200%] h-auto object-cover cursor-zoom-out' // Force large width to simulate zoom
+                                : 'max-w-full max-h-screen object-contain cursor-zoom-in'
+                            }`}
+                            alt="Zoom" 
+                            onClick={(e) => { e.stopPropagation(); setScale(!scale); }}
+                        />
+                    </div>
+
+                    <button className="absolute top-4 right-4 bg-zinc-800 p-2 rounded-full text-white z-[110] pointer-events-auto" onClick={onClose}>
+                        <Icons.X size={24} />
+                    </button>
+                    
+                    {!scale && <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/80 text-xs bg-black/50 px-3 py-1 rounded-full pointer-events-none">Toucher pour zoomer</div>}
                 </div>
             );
         };
@@ -223,8 +338,8 @@
             return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-50" />;
         };
 
-        // --- Composant Admin : Configuration ---
-        const ConfigSection = ({ settings, setSettings, title, contentField, titleField, imagesField, placeholderTitle, placeholderContent }) => {
+        // --- Composants Admin ---
+        const ConfigSection = ({ settings, setSettings, title, contentField, titleField, imagesField, placeholderTitle, placeholderContent, onZoom }) => {
             const addSettingImage = async (file) => {
                 if(file) {
                     const base64 = await compressImage(file);
@@ -238,14 +353,14 @@
                 <div className="space-y-4 bg-zinc-900 p-4 rounded-xl border border-zinc-800">
                     <div className="flex items-center gap-2 mb-2"><span className="text-zinc-500 font-bold uppercase text-xs">{title}</span></div>
                     <input className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg text-white font-bold" value={settings[titleField]} onChange={e => setSettings({...settings, [titleField]: e.target.value})} placeholder={placeholderTitle} />
-                    <textarea className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg text-white" rows={4} value={settings[contentField]} onChange={e => setSettings({...settings, [contentField]: e.target.value})} placeholder={placeholderContent} />
+                    <RichTextEditor value={settings[contentField]} onChange={e => setSettings({...settings, [contentField]: e.target.value})} placeholder={placeholderContent} />
                     <div>
                         <label className="block text-xs text-zinc-500 mb-2">Images de la page</label>
                         <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
                             {(settings[imagesField] || []).map((img, idx) => (
                                 <div key={idx} className="w-16 h-16 bg-black rounded border border-zinc-700 overflow-hidden relative shrink-0">
-                                    <img src={img} className="w-full h-full object-cover" />
-                                    <button onClick={() => removeSettingImage(idx)} className="absolute top-0 right-0 bg-red-600 p-0.5 text-white"><Icons.X size={10}/></button>
+                                    <img src={img} className="w-full h-full object-cover cursor-zoom-in" onClick={() => onZoom(img)} />
+                                    <button onClick={(e) => {e.stopPropagation(); removeSettingImage(idx)}} className="absolute top-0 right-0 bg-red-600 p-0.5 text-white"><Icons.X size={10}/></button>
                                 </div>
                             ))}
                         </div>
@@ -263,55 +378,110 @@
             const [view, setView] = useState('home'); 
             const [pages, setPages] = useState([]);
             const [settings, setSettings] = useState({
-                scenarioTitle: "Scénario Inconnu",
+                scenarioTitle: "Aucun Scénario", 
                 introTitle: "Introduction",
-                introContent: "Bienvenue. Cliquez sur commencer pour lancer le chrono.",
+                introContent: "",
                 introImages: [],
                 victoryTitle: "Félicitations !",
-                victoryContent: "Vous avez terminé l'aventure.",
+                victoryContent: "Vous avez terminé.",
                 victoryImages: [],
                 adminPassword: "admin", 
                 initialTime: 3600,
             });
-            const [gameState, setGameState] = useState({ currentPageIndex: 0, timer: 3600, isRunning: false, penaltyTotal: 0, hintsUnlocked: [], answersUnlocked: [], showConfetti: false });
+            const [gameState, setGameState] = useState({ 
+                currentPageIndex: 0, 
+                timer: 3600, 
+                isRunning: false, 
+                penaltyTotal: 0, 
+                hintsUnlocked: [], 
+                answersUnlocked: [], 
+                showConfetti: false,
+                timeOutHandled: false // Nouvelle prop pour la modale de fin de temps
+            });
             const [isScenarioLoaded, setIsScenarioLoaded] = useState(false);
+            const [showQuitModal, setShowQuitModal] = useState(false);
+            const [showTimeoutModal, setShowTimeoutModal] = useState(false); // Modale Temps Écoulé
+            const [zoomedImage, setZoomedImage] = useState(null); // Lifted state for global zoom
+
+            // Nouvel état pour le localStorage key pour forcer un reset si besoin
+            const STORAGE_KEY = 'escape_game_v3_multianswer';
 
             useEffect(() => {
-                const loadGame = (data) => {
-                    if (data?.settings && data?.pages) {
-                        const migratedPages = data.pages.map(p => {
-                            let imgs = p.images || (p.imageUrl ? [p.imageUrl] : []);
-                            imgs = imgs.map(img => typeof img === 'string' ? { url: img, type: 'puzzle' } : img);
-                            return { ...p, images: imgs, solutionPenalty: p.solutionPenalty || (p.hintPenalty ? p.hintPenalty * 2 : 120) };
-                        });
-                        setSettings({...settings, ...data.settings}); setPages(migratedPages); setIsScenarioLoaded(true);
-                    }
-                };
-                const hash = window.location.hash.substring(1);
-                if (hash) { const sharedGame = decodeGameData(hash); if(sharedGame) { loadGame(sharedGame); window.history.replaceState(null, null, ' '); return; } }
-                const savedData = localStorage.getItem('escapeGameDraft');
-                if (savedData) { try { loadGame(JSON.parse(savedData)); } catch (e) {} }
+                const savedData = localStorage.getItem(STORAGE_KEY); 
+                if (savedData) {
+                    try {
+                        const parsed = JSON.parse(savedData);
+                        if (parsed.pages && parsed.pages.length > 0) {
+                            const migratedPages = parsed.pages.map(p => {
+                                let imgs = p.images || (p.imageUrl ? [p.imageUrl] : []);
+                                imgs = imgs.map(img => typeof img === 'string' ? { url: img, type: 'puzzle' } : img);
+                                let audios = p.audios || (p.audioUrl ? [{url: p.audioUrl, name: 'Audio 1'}] : []);
+                                return { 
+                                    ...p, 
+                                    images: imgs,
+                                    audios: audios,
+                                    solutionPenalty: p.solutionPenalty || (p.hintPenalty ? p.hintPenalty * 2 : 120),
+                                    answerMode: p.answerMode || 'single' // 'single' (OU) ou 'all' (ET)
+                                };
+                            });
+                            setSettings({...settings, ...parsed.settings}); 
+                            setPages(migratedPages); 
+                            setIsScenarioLoaded(true);
+                        } else {
+                            setIsScenarioLoaded(false);
+                        }
+                    } catch (e) { console.error(e); }
+                } else {
+                    setIsScenarioLoaded(false);
+                }
             }, []);
 
             useEffect(() => {
-                if (view !== 'game' && view !== 'finish' && view !== 'intro') { localStorage.setItem('escapeGameDraft', JSON.stringify({ settings, pages })); }
+                if (view !== 'game' && view !== 'finish' && view !== 'intro' && view !== 'rules') { 
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, pages })); 
+                }
             }, [settings, pages, view]);
 
             useEffect(() => {
                 let interval = null;
-                if (gameState.isRunning && gameState.timer > 0) {
+                if (gameState.isRunning) {
                     interval = setInterval(() => {
                         setGameState(prev => {
-                            if (prev.timer <= 1) { setView('finish'); return { ...prev, timer: 0, isRunning: false }; }
+                            if (prev.timer <= 1 && !prev.timeOutHandled) { 
+                                // Pause à 0 pour afficher la modale
+                                setShowTimeoutModal(true);
+                                return { ...prev, timer: 0, timeOutHandled: true, isRunning: false }; 
+                            }
                             return { ...prev, timer: prev.timer - 1 };
                         });
                     }, 1000);
                 }
                 return () => clearInterval(interval);
-            }, [gameState.isRunning, gameState.timer]);
+            }, [gameState.isRunning]);
 
-            const goToIntro = () => { if (pages.length === 0) return alert("Aucun scénario chargé. Créez-en un ou importez un JSON."); setView('intro'); };
-            const startGame = () => { setGameState({ currentPageIndex: 0, timer: settings.initialTime, isRunning: true, penaltyTotal: 0, hintsUnlocked: [], answersUnlocked: [], showConfetti: false }); setView('game'); };
+            const goToRules = () => { if (pages.length === 0) return alert("Aucun scénario chargé."); setView('rules'); };
+            const startGame = () => { 
+                setGameState({ 
+                    currentPageIndex: 0, 
+                    timer: settings.initialTime, 
+                    isRunning: true, 
+                    penaltyTotal: 0, 
+                    hintsUnlocked: [], 
+                    answersUnlocked: [], 
+                    showConfetti: false,
+                    timeOutHandled: false 
+                }); 
+                setView('game'); 
+            };
+            
+            const handleQuitRequest = () => { setShowQuitModal(true); };
+            const handleQuitConfirm = () => { setShowQuitModal(false); setView('home'); };
+            
+            const handleTimeoutContinue = () => {
+                setShowTimeoutModal(false);
+                setGameState(prev => ({ ...prev, isRunning: true }));
+            };
+
             const handleCorrectAnswer = () => {
                 setGameState(prev => ({ ...prev, showConfetti: true }));
                 setTimeout(() => {
@@ -323,6 +493,7 @@
                     });
                 }, 2000);
             };
+            
             const handleImportJson = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -334,32 +505,77 @@
                             const migratedPages = data.pages.map(p => {
                                 let imgs = p.images || (p.imageUrl ? [p.imageUrl] : []);
                                 imgs = imgs.map(img => typeof img === 'string' ? { url: img, type: 'puzzle' } : img);
-                                return { ...p, images: imgs, solutionPenalty: p.solutionPenalty || 120 };
+                                let audios = p.audios || (p.audioUrl ? [{url: p.audioUrl, name: 'Audio 1'}] : []);
+                                return { 
+                                    ...p, 
+                                    images: imgs,
+                                    audios: audios,
+                                    solutionPenalty: p.solutionPenalty || 120,
+                                    answerMode: p.answerMode || 'single'
+                                };
                             });
-                            setSettings({...settings, ...data.settings}); setPages(migratedPages); setIsScenarioLoaded(true); alert("Scénario chargé !");
+                            setSettings({...settings, ...data.settings}); 
+                            setPages(migratedPages); 
+                            setIsScenarioLoaded(true); 
+                            alert("Scénario chargé !");
                         }
                     } catch (err) { alert("Fichier invalide"); }
                 };
                 reader.readAsText(file);
             };
-            const unlockHint = (pageId, penalty) => setGameState(prev => ({ ...prev, hintsUnlocked: [...prev.hintsUnlocked, pageId], timer: Math.max(0, prev.timer - penalty), penaltyTotal: prev.penaltyTotal + penalty }));
-            const unlockAnswer = (pageId, penalty) => setGameState(prev => ({ ...prev, answersUnlocked: [...prev.answersUnlocked, pageId], timer: Math.max(0, prev.timer - penalty), penaltyTotal: prev.penaltyTotal + penalty }));
-            const applyWrongAnswerPenalty = (penalty) => setGameState(prev => ({ ...prev, timer: Math.max(0, prev.timer - penalty), penaltyTotal: prev.penaltyTotal + penalty }));
+            
+            // Pas de Math.max(0, ...) pour autoriser les temps négatifs
+            const unlockHint = (pageId, penalty) => setGameState(prev => ({ ...prev, hintsUnlocked: [...prev.hintsUnlocked, pageId], timer: prev.timer - penalty, penaltyTotal: prev.penaltyTotal + penalty }));
+            const unlockAnswer = (pageId, penalty) => setGameState(prev => ({ ...prev, answersUnlocked: [...prev.answersUnlocked, pageId], timer: prev.timer - penalty, penaltyTotal: prev.penaltyTotal + penalty }));
+            const applyWrongAnswerPenalty = (penalty) => setGameState(prev => ({ ...prev, timer: prev.timer - penalty, penaltyTotal: prev.penaltyTotal + penalty }));
 
             return (
                 <div className="min-h-screen">
                     {gameState.showConfetti && <Confetti />}
-                    {view === 'home' && <HomeView settings={settings} isScenarioLoaded={isScenarioLoaded} onStart={goToIntro} onAdmin={() => setView('adminLogin')} onImport={handleImportJson} />}
-                    {view === 'intro' && <IntroView settings={settings} onStartGame={startGame} onBack={() => setView('home')} />}
-                    {view === 'game' && pages.length > 0 && <GameView page={pages[gameState.currentPageIndex]} gameState={gameState} onCorrectAnswer={handleCorrectAnswer} onUnlockHint={unlockHint} onUnlockAnswer={unlockAnswer} onWrongAnswer={applyWrongAnswerPenalty} totalSteps={pages.length} />}
-                    {view === 'finish' && <FinishView settings={settings} timer={gameState.timer} penalty={gameState.penaltyTotal} isWin={gameState.timer > 0} onHome={() => setView('home')} />}
+                    {showQuitModal && (
+                        <Modal
+                            isOpen={true}
+                            title="Retourner à l'accueil ?"
+                            confirmText="Quitter"
+                            confirmColor="bg-red-600"
+                            onCancel={() => setShowQuitModal(false)}
+                            onConfirm={handleQuitConfirm}
+                            cancelText="Annuler"
+                        >
+                            <p>Attention, toute votre progression actuelle sera perdue.</p>
+                        </Modal>
+                    )}
+                    {showTimeoutModal && (
+                         <Modal
+                            isOpen={true}
+                            title="Temps Écoulé !"
+                            confirmText="Continuer pour l'honneur"
+                            confirmColor="bg-indigo-600"
+                            onConfirm={handleTimeoutContinue}
+                        >
+                            <div className="text-center">
+                                <Icons.Clock size={48} className="mx-auto text-red-500 mb-2"/>
+                                <p>Le temps imparti est terminé.</p>
+                                <p className="text-sm mt-2 text-zinc-400">Vous pouvez continuer à jouer, mais le chrono s'affichera en rouge.</p>
+                            </div>
+                        </Modal>
+                    )}
+                    
+                    {/* LIGHTBOX GLOBALE */}
+                    {zoomedImage && <Lightbox src={zoomedImage} onClose={() => setZoomedImage(null)} />}
+
+                    {view === 'home' && <HomeView settings={settings} isScenarioLoaded={isScenarioLoaded} onStart={goToRules} onAdmin={() => setView('adminLogin')} onImport={handleImportJson} />}
+                    {view === 'rules' && <RulesView onNext={() => setView('intro')} onBack={() => setView('home')} />}
+                    {view === 'intro' && <IntroView settings={settings} onStartGame={startGame} onBack={() => setView('rules')} onZoom={setZoomedImage} />}
+                    {view === 'game' && pages.length > 0 && <GameView page={pages[gameState.currentPageIndex]} gameState={gameState} onCorrectAnswer={handleCorrectAnswer} onUnlockHint={unlockHint} onUnlockAnswer={unlockAnswer} onWrongAnswer={applyWrongAnswerPenalty} totalSteps={pages.length} onQuit={handleQuitRequest} onZoom={setZoomedImage} />}
+                    {view === 'finish' && <FinishView settings={settings} timer={gameState.timer} penalty={gameState.penaltyTotal} isWin={true} onHome={() => setView('home')} onZoom={setZoomedImage} isOvertime={gameState.timeOutHandled || gameState.timer < 0} />}
                     {view === 'adminLogin' && <AdminLogin password={settings.adminPassword} onSuccess={() => setView('adminDashboard')} onCancel={() => setView('home')} />}
-                    {view === 'adminDashboard' && <AdminDashboard settings={settings} setSettings={setSettings} pages={pages} setPages={setPages} onExit={() => setView('home')} setIsScenarioLoaded={setIsScenarioLoaded} />}
+                    {view === 'adminDashboard' && <AdminDashboard settings={settings} setSettings={setSettings} pages={pages} setPages={setPages} onExit={() => setView('home')} setIsScenarioLoaded={setIsScenarioLoaded} onZoom={setZoomedImage} />}
                 </div>
             );
         }
 
-        // --- Ecrans du Jeu ---
+        // --- Ecrans ---
 
         function HomeView({ settings, isScenarioLoaded, onStart, onAdmin, onImport }) {
             return (
@@ -367,7 +583,7 @@
                     <div className="flex-1 flex flex-col justify-center w-full max-w-md space-y-8 animate-fade-in-up">
                         <div className="text-center space-y-4">
                             <div className="inline-block p-3 rounded-full bg-indigo-500/10 mb-2"><Icons.Lock size={48} className="text-indigo-400" /></div>
-                            <h1 className="text-3xl font-bold text-white drop-shadow-lg">Mon Escape Game</h1>
+                            <h1 className="text-3xl font-bold text-white drop-shadow-lg">Simple Escape Game</h1>
                             {isScenarioLoaded ? (
                                 <div className="bg-zinc-800/80 border border-zinc-700 p-4 rounded-xl">
                                     <span className="text-xs text-zinc-500 uppercase font-bold">Scénario chargé</span>
@@ -396,31 +612,54 @@
             );
         }
 
-        function IntroView({ settings, onStartGame, onBack }) {
-            const [zoomedImage, setZoomedImage] = useState(null);
+        function RulesView({ onNext, onBack }) {
             return (
                 <div className="min-h-screen bg-zinc-950 p-6 flex flex-col items-center justify-center">
                     <div className="w-full max-w-lg space-y-6 animate-fade-in-up">
-                        <div className="flex items-center justify-between"><button onClick={onBack} className="text-zinc-500 hover:text-white"><Icons.X /></button><div className="text-xs font-mono text-zinc-600">INTRODUCTION</div><div className="w-6"></div></div>
-                        <ImageGallery images={settings.introImages} onZoom={setZoomedImage} />
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center space-y-4 shadow-xl">
-                            <h1 className="text-2xl font-bold text-white break-words">{settings.introTitle}</h1>
-                            <div className="max-h-60 overflow-y-auto px-2 scrollbar-thin scrollbar-thumb-zinc-700">
-                                <p className="text-zinc-300 whitespace-pre-wrap break-words leading-relaxed max-w-[80%] mx-auto">{settings.introContent}</p>
+                        <div className="flex items-center justify-between"><button onClick={onBack} className="text-zinc-500 hover:text-white"><Icons.X /></button><div className="text-xs font-mono text-zinc-600">RÈGLES DU JEU</div><div className="w-6"></div></div>
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6">
+                            <div className="text-center"><h1 className="text-2xl font-bold text-white mb-2">Comment Jouer ?</h1><div className="w-16 h-1 bg-indigo-600 mx-auto rounded"></div></div>
+                            <div className="space-y-4 text-sm text-zinc-300">
+                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.Clock size={20} className="text-emerald-400"/></div><div><p className="font-bold text-white">Le Temps est Compté</p><p>Vous avez un temps limité pour finir l'aventure. Chaque seconde compte !</p></div></div>
+                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.AlertTriangle size={20} className="text-red-400"/></div><div><p className="font-bold text-white">Attention aux Erreurs</p><p>Chaque mauvaise réponse vous enlèvera du temps précieux.</p></div></div>
+                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.Layout size={20} className="text-blue-400"/></div><div><p className="font-bold text-white">Indices Visuels</p><p>Les images <strong>au-dessus</strong> du texte sont pour l'ambiance.<br/>Les images <strong>en-dessous</strong> du texte font partie de l'énigme. De même avec les sons.</p></div></div>
+                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.ListChecks size={20} className="text-purple-400"/></div><div><p className="font-bold text-white">Types de Réponses</p><p>Si un compteur (format 0/X) est présent, plusieurs réponses sont attendues. Il suffit de les entrer les unes après les autres (à chaque réponse, appuyer sur valider)</p><p>Sans compteur, il suffit simplement de rentrer une réponse, plusieurs peuvent être possibles en fonction des questions.</p></div></div>
                             </div>
                         </div>
-                        <button onClick={onStartGame} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center"><Icons.Clock className="mr-2" /> LANCER LE CHRONO</button>
+                        <button onClick={onNext} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white shadow-lg active:scale-95 transition-all">J'AI COMPRIS</button>
                     </div>
-                    {zoomedImage && <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-2" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain" alt="Zoom" /><button className="absolute top-6 right-6 bg-zinc-800 p-2 rounded-full text-white"><Icons.X size={24} /></button></div>}
                 </div>
             );
         }
 
-        function GameView({ page, gameState, onCorrectAnswer, onUnlockHint, onUnlockAnswer, onWrongAnswer, totalSteps }) {
+        function IntroView({ settings, onStartGame, onBack, onZoom }) {
+            return (
+                <div className="min-h-screen bg-zinc-950 p-6 flex flex-col items-center justify-center">
+                    <div className="w-full max-w-lg space-y-6 animate-fade-in-up">
+                        <div className="flex items-center justify-between"><button onClick={onBack} className="text-zinc-500 hover:text-white"><Icons.X /></button><div className="text-xs font-mono text-zinc-600">INTRODUCTION</div><div className="w-6"></div></div>
+                        <ImageGallery images={settings.introImages} onZoom={onZoom} />
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center space-y-4 shadow-xl">
+                            <h1 className="text-2xl font-bold text-white break-words">{settings.introTitle}</h1>
+                            <div className="max-h-60 overflow-y-auto px-2 scrollbar-thin scrollbar-thumb-zinc-700">
+                                <div className="text-zinc-300 whitespace-pre-wrap break-words leading-relaxed max-w-[80%] mx-auto">
+                                    <HtmlText content={settings.introContent} />
+                                </div>
+                            </div>
+                        </div>
+                        <button onClick={onStartGame} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center"><Icons.Clock className="mr-2" /> LANCER LE CHRONO</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function GameView({ page, gameState, onCorrectAnswer, onUnlockHint, onUnlockAnswer, onWrongAnswer, totalSteps, onQuit, onZoom }) {
             const [input, setInput] = useState('');
             const [errorShake, setErrorShake] = useState(false);
+            const [penaltyFlash, setPenaltyFlash] = useState(null);
             const [zoomedImage, setZoomedImage] = useState(null);
             const [modalType, setModalType] = useState(null); 
+            const [foundAnswers, setFoundAnswers] = useState([]);
+
             const isHintUnlocked = gameState.hintsUnlocked.includes(page.id);
             const isAnswerUnlocked = gameState.answersUnlocked.includes(page.id);
             const currentStep = gameState.currentPageIndex + 1;
@@ -428,63 +667,147 @@
             const loreImages = images.filter(img => img.type === 'lore');
             const puzzleImages = images.filter(img => img.type !== 'lore');
 
-            useEffect(() => { setInput(''); setErrorShake(false); setZoomedImage(null); setModalType(null); }, [page.id]);
+            // Extraction des réponses possibles (séparées par virgules)
+            const possibleAnswers = page.answer.split(',').map(s => normalizeText(s));
+            const requiredAnswersCount = page.answerMode === 'all' ? possibleAnswers.length : 1;
+            
+            // Reset local state on page change
+            useEffect(() => { 
+                setInput(''); 
+                setErrorShake(false); 
+                setPenaltyFlash(null); 
+                setModalType(null); 
+                setFoundAnswers([]);
+            }, [page.id]);
 
             const handleSubmit = (e) => {
                 e.preventDefault();
                 if (!input.trim()) return;
-                if (normalizeText(input) === normalizeText(page.answer)) { onCorrectAnswer(); } 
-                else {
-                    setErrorShake(true); setTimeout(() => setErrorShake(false), 500);
-                    const penalty = page.wrongPenalty || 60; onWrongAnswer(penalty); alert(`Mauvaise réponse ! -${penalty} secondes`);
+                
+                const normalizedInput = normalizeText(input);
+                const isCorrect = possibleAnswers.includes(normalizedInput);
+
+                if (isCorrect) {
+                    if (page.answerMode === 'all') {
+                        // Mode: Toutes les réponses requises
+                        if (!foundAnswers.includes(normalizedInput)) {
+                            const newFound = [...foundAnswers, normalizedInput];
+                            setFoundAnswers(newFound);
+                            setInput(''); // Clear input
+                            if (newFound.length === possibleAnswers.length) {
+                                onCorrectAnswer();
+                            }
+                        } else {
+                            // Déjà trouvé, petit feedback visuel mais pas d'erreur
+                            alert("Déjà trouvé !");
+                        }
+                    } else {
+                        // Mode: Une seule réponse suffit
+                        onCorrectAnswer();
+                    }
+                } else {
+                    const penalty = page.wrongPenalty || 60;
+                    setErrorShake(true); 
+                    setPenaltyFlash(`-${penalty}s`);
+                    setTimeout(() => setErrorShake(false), 500);
+                    setTimeout(() => setPenaltyFlash(null), 1500);
+                    onWrongAnswer(penalty); 
                 }
             };
-            const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+            const formatTime = (s) => `${Math.floor(Math.abs(s) / 60).toString().padStart(2, '0')}:${(Math.abs(s) % 60).toString().padStart(2, '0')}`;
 
             return (
                 <div className="flex flex-col min-h-screen pb-6 bg-zinc-900">
                     <div className="bg-zinc-800/90 backdrop-blur-sm p-4 flex justify-between items-center sticky top-0 z-10 shadow-lg border-b border-zinc-700">
-                        <span className="bg-zinc-700 text-zinc-300 px-3 py-1 rounded-full text-xs font-bold font-mono">{currentStep} / {totalSteps}</span>
-                        <div className={`font-mono text-xl font-bold flex items-center ${gameState.timer < 300 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}><Icons.Clock className="mr-2 h-5 w-5" /> {formatTime(gameState.timer)}</div>
+                        <button onClick={onQuit} className="p-2 text-zinc-400 hover:text-white rounded-full bg-zinc-700/50"><Icons.Home size={18} /></button>
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Étape</span>
+                            <span className="text-white font-mono font-bold text-sm">{currentStep} / {totalSteps}</span>
+                        </div>
+                        <div className={`font-mono text-xl font-bold flex items-center ${gameState.timer <= 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}><Icons.Clock className="mr-2 h-5 w-5" /> {formatTime(gameState.timer)}</div>
                     </div>
                     <div className="flex-1 flex flex-col items-center p-6 w-full max-w-lg mx-auto space-y-6">
-                        {loreImages.length > 0 && <ImageGallery images={loreImages} onZoom={setZoomedImage} />}
+                        {loreImages.length > 0 && <ImageGallery images={loreImages} onZoom={onZoom} />}
                         <div className="w-full text-center space-y-2 animate-fade-in-up flex flex-col min-h-0">
                             <h2 className="text-2xl font-bold text-white break-words">{page.title}</h2>
                             <div className="max-h-60 overflow-y-auto px-2 py-1 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
-                                <p className="text-zinc-400 whitespace-pre-wrap break-words leading-relaxed text-base max-w-[80%] mx-auto">{page.content}</p>
+                                <div className="text-zinc-400 whitespace-pre-wrap break-words leading-relaxed text-base max-w-[80%] mx-auto">
+                                    <HtmlText content={page.content} />
+                                </div>
                             </div>
+                            
+                            {/* Audio List */}
+                            {page.audios && page.audios.length > 0 && (
+                                <div className="w-full max-w-[80%] mx-auto mt-4 space-y-2">
+                                     {page.audios.map((audio, idx) => (
+                                         <div key={idx} className="bg-zinc-900 rounded p-2 border border-zinc-800">
+                                            <div className="text-xs text-zinc-500 mb-1 ml-1 flex items-center"><Icons.Music size={12} className="mr-1"/> Piste {idx + 1}</div>
+                                            <audio controls src={audio.url} className="w-full h-8 rounded" />
+                                         </div>
+                                     ))}
+                                </div>
+                            )}
                         </div>
-                        {puzzleImages.length > 0 && <ImageGallery images={puzzleImages} onZoom={setZoomedImage} />}
-                        <form onSubmit={handleSubmit} className="w-full space-y-4 mt-auto">
-                            <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Votre réponse..." className={`w-full bg-zinc-950 border-2 ${errorShake ? 'border-red-500 animate-shake' : 'border-zinc-800 focus:border-emerald-500'} rounded-xl py-4 px-4 text-center text-lg outline-none transition-all text-white placeholder:text-zinc-600`} />
+                        {puzzleImages.length > 0 && <ImageGallery images={puzzleImages} onZoom={onZoom} />}
+                        
+                        <form onSubmit={handleSubmit} className="w-full space-y-2 mt-auto">
+                             {/* Indicateur de progression si mode "Toutes les réponses" */}
+                            {page.answerMode === 'all' && (
+                                <div className="text-center text-sm mb-2 font-mono text-indigo-400">
+                                    Progression : {foundAnswers.length} / {possibleAnswers.length}
+                                </div>
+                            )}
+
+                            <div className="relative">
+                                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Votre réponse..." className={`w-full bg-zinc-950 border-2 ${errorShake ? 'border-red-500 animate-shake' : 'border-zinc-800 focus:border-emerald-500'} rounded-xl py-4 px-4 text-center text-lg outline-none transition-all text-white placeholder:text-zinc-600`} />
+                                {penaltyFlash && <div className="absolute -bottom-8 left-0 right-0 text-center animate-fade-out-up"><span className="text-red-500 font-bold font-mono">{penaltyFlash}</span></div>}
+                            </div>
                             <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all">VALIDER</button>
                         </form>
                         <div className="w-full pt-2 flex flex-col gap-3">
                             <button type="button" onClick={() => isHintUnlocked ? null : setModalType('hint')} className={`w-full py-3 rounded-lg text-sm flex items-center justify-center transition-colors ${isHintUnlocked ? "bg-amber-900/20 text-amber-200 border border-amber-500/30 cursor-default" : "text-amber-500/70 hover:text-amber-400 border border-transparent hover:border-amber-500/20"}`}>
                                 {isHintUnlocked ? <div className="text-center"><span className="font-bold block mb-1 uppercase text-xs tracking-wider text-amber-500">Indice Débloqué</span><p className="break-words max-w-[90%] mx-auto">{page.hint}</p></div> : <><Icons.HelpCircle className="mr-2 h-4 w-4" /> Besoin d'un indice ? (-{page.hintPenalty || 60}s)</>}
                             </button>
-                            {isHintUnlocked && <button type="button" onClick={() => isAnswerUnlocked ? null : setModalType('answer')} className={`w-full py-2 rounded-lg text-xs flex items-center justify-center transition-colors ${isAnswerUnlocked ? "bg-red-900/20 text-red-200 border border-red-500/30 cursor-default" : "text-red-500/70 hover:text-red-400 border border-transparent hover:border-red-500/20"}`}>{isAnswerUnlocked ? <div className="text-center"><span className="font-bold block uppercase text-[10px] tracking-wider text-red-500">Solution</span>La réponse est : <span className="font-mono font-bold">{page.answer}</span></div> : <><Icons.Lock className="mr-2 h-3 w-3" /> Bloqué ? Révéler la réponse (-{page.solutionPenalty || 120}s)</>}</button>}
+                            {isHintUnlocked && <button type="button" onClick={() => isAnswerUnlocked ? null : setModalType('answer')} className={`w-full py-2 rounded-lg text-xs flex items-center justify-center transition-colors ${isAnswerUnlocked ? "bg-red-900/20 text-red-200 border border-red-500/30 cursor-default" : "text-red-500/70 hover:text-red-400 border border-transparent hover:border-red-500/20"}`}>
+                                {isAnswerUnlocked ? 
+                                    <div className="text-center">
+                                        <span className="font-bold block uppercase text-[10px] tracking-wider text-red-500">
+                                            {page.answerMode === 'all' ? "Réponses attendues" : "Réponses possibles"}
+                                        </span>
+                                        <span className="font-mono font-bold text-sm">
+                                            {page.answerMode === 'all' 
+                                                ? page.answer.split(',').join(',') // or list
+                                                : page.answer.split(',').join(',')
+                                            }
+                                        </span>
+                                    </div> 
+                                : <><Icons.Lock className="mr-2 h-3 w-3" /> Bloqué ? Révéler la réponse (-{page.solutionPenalty || 120}s)</>}
+                            </button>}
                         </div>
                     </div>
-                    <Modal isOpen={modalType === 'hint'} title="Débloquer l'indice ?" confirmText={`Oui, perdre ${page.hintPenalty || 60}s`} confirmColor="bg-amber-600" onCancel={() => setModalType(null)} onConfirm={() => { onUnlockHint(page.id, page.hintPenalty || 60); setModalType(null); }}><p>Êtes-vous sûr de vouloir un indice ? Cela retirera du temps à votre chrono.</p></Modal>
-                    <Modal isOpen={modalType === 'answer'} title="Abandonner cette étape ?" confirmText={`Révéler (-${page.solutionPenalty || 120}s)`} confirmColor="bg-red-600" onCancel={() => setModalType(null)} onConfirm={() => { onUnlockAnswer(page.id, page.solutionPenalty || 120); setModalType(null); }}><p>Cela affichera la réponse exacte mais vous coûtera une pénalité fixe.</p></Modal>
+                    <Modal isOpen={modalType === 'hint'} title="Débloquer l'indice ?" confirmText={`Oui, perdre ${page.hintPenalty || 60}s`} confirmColor="bg-amber-600" onCancel={() => setModalType(null)} onConfirm={() => { onUnlockHint(page.id, page.hintPenalty || 60); setModalType(null); }} cancelText="Annuler"><p>Êtes-vous sûr de vouloir un indice ? Cela retirera du temps à votre chrono.</p></Modal>
+                    <Modal isOpen={modalType === 'answer'} title="Abandonner cette étape ?" confirmText={`Révéler (-${page.solutionPenalty || 120}s)`} confirmColor="bg-red-600" onCancel={() => setModalType(null)} onConfirm={() => { onUnlockAnswer(page.id, page.solutionPenalty || 120); setModalType(null); }} cancelText="Annuler"><p>Cela affichera la réponse exacte mais vous coûtera une pénalité fixe.</p></Modal>
                     {zoomedImage && <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-2" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain" alt="Zoom" /><button className="absolute top-6 right-6 bg-zinc-800 p-2 rounded-full text-white"><Icons.X size={24} /></button></div>}
                 </div>
             );
         }
 
-        function AdminDashboard({ settings, setSettings, pages, setPages, onExit, setIsScenarioLoaded }) {
+        function AdminDashboard({ settings, setSettings, pages, setPages, onExit, setIsScenarioLoaded, onZoom }) {
             const [tab, setTab] = useState('settings'); 
             const [editingPage, setEditingPage] = useState(null);
+            const [showResetModal, setShowResetModal] = useState(false);
             
             const handleNewScenario = () => {
-                if(confirm("Créer un nouveau scénario vierge ?")) {
-                    setPages([]);
-                    setSettings({...settings, scenarioTitle: "Nouveau Scénario", introTitle: "Intro", introContent:"", introImages:[], victoryTitle:"Victoire", victoryContent:"", victoryImages:[]});
-                    setIsScenarioLoaded(true);
-                }
+                setShowResetModal(true);
             };
+
+            const confirmNewScenario = () => {
+                setPages([]);
+                setSettings({...settings, scenarioTitle: "Nouveau Scénario", introTitle: "Intro", introContent:"", introImages:[], victoryTitle:"Victoire", victoryContent:"", victoryImages:[]});
+                setIsScenarioLoaded(true);
+                setShowResetModal(false);
+            };
+            
             const handleExportJson = () => {
                 const data = JSON.stringify({ settings, pages }, null, 2);
                 const blob = new Blob([data], { type: 'application/json' });
@@ -506,6 +829,30 @@
                 newImages[idx].type = newImages[idx].type === 'lore' ? 'puzzle' : 'lore';
                 setEditingPage({...editingPage, images: newImages});
             };
+            
+            // Audio handler for page editor
+            const handleAudioUpload = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                     // Check size (2MB limit warning)
+                    if (file.size > 2 * 1024 * 1024) {
+                        if(!confirm("Ce fichier audio dépasse 2Mo. Cela risque de bloquer la sauvegarde. Voulez-vous continuer ?")) return;
+                    }
+                    try {
+                        const base64 = await readFileAsBase64(file);
+                        setEditingPage({...editingPage, audios: [...(editingPage.audios || []), { url: base64 }]});
+                    } catch (err) { alert("Erreur upload audio"); }
+                }
+            };
+
+            const addAudioUrl = (url) => {
+                if(url) setEditingPage({...editingPage, audios: [...(editingPage.audios || []), { url: url }]});
+            };
+
+            const removeAudio = (idx) => {
+                 setEditingPage({...editingPage, audios: editingPage.audios.filter((_, i) => i !== idx)});
+            };
+
             const movePage = (index, direction) => {
                 const newPages = [...pages];
                 if ((direction === -1 && index > 0) || (direction === 1 && index < newPages.length - 1)) {
@@ -517,6 +864,8 @@
 
             if (editingPage) {
                 const images = editingPage.images || [];
+                const audios = editingPage.audios || [];
+
                 return (
                     <div className="min-h-screen bg-zinc-950 p-4">
                         <div className="max-w-2xl mx-auto">
@@ -525,7 +874,25 @@
                                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
                                     <div className="flex items-center text-indigo-400 text-sm font-bold uppercase tracking-wider mb-2"><Icons.Layout size={16} className="mr-2"/> Visuel</div>
                                     <input className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-lg text-white" placeholder="Titre du niveau" value={editingPage.title} onChange={e => setEditingPage({...editingPage, title: e.target.value})} />
-                                    <textarea rows={4} className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-lg text-white" placeholder="Contenu de l'énigme..." value={editingPage.content} onChange={e => setEditingPage({...editingPage, content: e.target.value})} />
+                                    <RichTextEditor value={editingPage.content} onChange={e => setEditingPage({...editingPage, content: e.target.value})} placeholder="Contenu de l'énigme..." />
+                                    
+                                    {/* Audio Section */}
+                                    <div>
+                                        <label className="block text-xs text-zinc-500 mb-2">Pistes Audio</label>
+                                        <div className="flex flex-col gap-2 mb-2">
+                                             {audios.map((audio, idx) => (
+                                                 <div key={idx} className="flex items-center bg-black rounded p-2 border border-zinc-700">
+                                                     <div className="flex-1 truncate text-xs text-zinc-400 mr-2">Piste {idx + 1}</div>
+                                                     <button onClick={() => removeAudio(idx)} className="text-red-500"><Icons.X size={14}/></button>
+                                                 </div>
+                                             ))}
+                                        </div>
+                                        <div className="flex gap-2">
+                                             <label className="bg-zinc-800 p-2 rounded border border-zinc-700 cursor-pointer text-zinc-300 flex items-center"><Icons.Upload size={16} className="mr-2"/><span className="text-xs">MP3</span><input type="file" accept="audio/*" className="hidden" onChange={handleAudioUpload} /></label>
+                                             <input className="flex-1 bg-zinc-950 border border-zinc-700 p-2 rounded text-xs" placeholder="URL Audio + Entrée" onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value) { addAudioUrl(e.target.value); e.target.value = ''; }}} />
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label className="block text-xs text-zinc-500 mb-2">Galerie Images</label>
                                         <div className="flex flex-col gap-3">
@@ -541,7 +908,28 @@
                                 </div>
                                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
                                     <div className="flex items-center text-emerald-500 text-sm font-bold uppercase tracking-wider mb-2"><Icons.Lock size={16} className="mr-2"/> Solutions</div>
-                                    <input className="w-full bg-zinc-950 border border-emerald-900/50 p-3 rounded-lg text-white" placeholder="Réponse attendue" value={editingPage.answer} onChange={e => setEditingPage({...editingPage, answer: e.target.value})} />
+                                    
+                                    <div className="bg-zinc-950 p-3 border border-zinc-700 rounded-lg">
+                                        <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-2">Mode de réponse</label>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                className={`flex-1 py-2 text-xs rounded border ${editingPage.answerMode !== 'all' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400'}`}
+                                                onClick={() => setEditingPage({...editingPage, answerMode: 'single'})}
+                                            >
+                                                L'une des réponses (OU)
+                                            </button>
+                                            <button 
+                                                className={`flex-1 py-2 text-xs rounded border ${editingPage.answerMode === 'all' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400'}`}
+                                                onClick={() => setEditingPage({...editingPage, answerMode: 'all'})}
+                                            >
+                                                Toutes les réponses (ET)
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <input className="w-full bg-zinc-950 border border-emerald-900/50 p-3 rounded-lg text-white" placeholder="Réponses (séparées par virgules)" value={editingPage.answer} onChange={e => setEditingPage({...editingPage, answer: e.target.value})} />
+                                    <p className="text-[10px] text-zinc-500">Ex: "Clef, Passe-partout" (Le joueur doit trouver l'une ou toutes selon le mode).</p>
+
                                     <input className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-lg text-white" placeholder="Texte de l'indice" value={editingPage.hint} onChange={e => setEditingPage({...editingPage, hint: e.target.value})} />
                                     <div className="grid grid-cols-3 gap-2">
                                         <div><label className="block text-[10px] text-amber-500 mb-1">Coût Indice</label><input type="number" className="w-full bg-zinc-950 border border-zinc-700 p-2 rounded-lg text-white text-center" value={editingPage.hintPenalty} onChange={e => setEditingPage({...editingPage, hintPenalty: parseInt(e.target.value) || 0})} /></div>
@@ -560,6 +948,11 @@
 
             return (
                 <div className="flex flex-col min-h-screen bg-zinc-950 text-white">
+                    {showResetModal && (
+                        <Modal isOpen={true} title="Créer un nouveau scénario ?" confirmText="Confirmer" confirmColor="bg-red-600" onCancel={() => setShowResetModal(false)} onConfirm={confirmNewScenario} cancelText="Annuler">
+                            <p>Attention, cela effacera le scénario actuel. Pensez à l'exporter avant.</p>
+                        </Modal>
+                    )}
                     <div className="bg-zinc-900 border-b border-zinc-800 p-4 sticky top-0 z-20 flex justify-between items-center shadow-lg"><h2 className="font-bold flex items-center text-indigo-400"><Icons.Wrench className="mr-2" size={20}/> ADMIN</h2><button onClick={onExit} className="text-xs bg-zinc-800 px-3 py-2 rounded-lg hover:bg-zinc-700">Quitter</button></div>
                     <div className="flex p-2 gap-1 bg-zinc-950 sticky top-[65px] z-10 overflow-x-auto">
                         <TabButton active={tab === 'settings'} onClick={() => setTab('settings')} icon={Icons.Settings} label="Scénario" />
@@ -570,31 +963,41 @@
                     </div>
                     <div className="p-4 flex-1 overflow-y-auto max-w-2xl mx-auto w-full pb-20">
                         {tab === 'settings' && <div className="space-y-4 bg-zinc-900 p-4 rounded-xl border border-zinc-800"><div><label className="text-xs text-zinc-500 font-bold uppercase">Nom du Scénario</label><input className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg mt-1" value={settings.scenarioTitle} onChange={e => setSettings({...settings, scenarioTitle: e.target.value})} /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs text-zinc-500 font-bold uppercase">Temps (s)</label><input type="number" className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg mt-1" value={settings.initialTime} onChange={e => setSettings({...settings, initialTime: parseInt(e.target.value)})} /></div><div><label className="text-xs text-zinc-500 font-bold uppercase">Mdp Admin</label><input className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-lg mt-1" value={settings.adminPassword} onChange={e => setSettings({...settings, adminPassword: e.target.value})} /></div></div></div>}
-                        {tab === 'intro' && <ConfigSection settings={settings} setSettings={setSettings} title="Introduction" titleField="introTitle" contentField="introContent" imagesField="introImages" placeholderTitle="Titre Intro" placeholderContent="Texte d'introduction..." />}
-                        {tab === 'victory' && <ConfigSection settings={settings} setSettings={setSettings} title="Victoire" titleField="victoryTitle" contentField="victoryContent" imagesField="victoryImages" placeholderTitle="Titre Victoire" placeholderContent="Message de fin..." />}
-                        {tab === 'levels' && <div className="space-y-4">{pages.map((p, i) => (<div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex items-center justify-between shadow-sm"><div className="flex items-center gap-3 overflow-hidden"><span className="bg-zinc-800 text-zinc-500 w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm shrink-0">{i+1}</span><div className="min-w-0"><h3 className="font-bold truncate text-sm">{p.title || 'Sans titre'}</h3></div></div><div className="flex gap-1 items-center"><div className="flex flex-col mr-1"><button onClick={() => movePage(i, -1)} disabled={i === 0} className="text-zinc-600 hover:text-white disabled:opacity-20"><Icons.ArrowUp size={14}/></button><button onClick={() => movePage(i, 1)} disabled={i === pages.length - 1} className="text-zinc-600 hover:text-white disabled:opacity-20"><Icons.ArrowDown size={14}/></button></div><button onClick={() => setEditingPage(p)} className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg"><Icons.Edit3 size={16}/></button><button onClick={() => { if (confirm("Supprimer ?")) setPages(pages.filter(x => x.id !== p.id)); }} className="p-2 bg-red-500/10 text-red-400 rounded-lg"><Icons.Trash2 size={16}/></button></div></div>))}<button onClick={() => setEditingPage({ id: null, title:'', content:'', answer:'', hint:'', hintPenalty:60, solutionPenalty:120, wrongPenalty:60, images:[] })} className="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg z-30"><Icons.Plus size={28} /></button></div>}
+                        {tab === 'intro' && <ConfigSection settings={settings} setSettings={setSettings} title="Introduction" titleField="introTitle" contentField="introContent" imagesField="introImages" placeholderTitle="Titre Intro" placeholderContent="Texte d'introduction..." onZoom={onZoom} />}
+                        {tab === 'victory' && <ConfigSection settings={settings} setSettings={setSettings} title="Victoire" titleField="victoryTitle" contentField="victoryContent" imagesField="victoryImages" placeholderTitle="Titre Victoire" placeholderContent="Message de fin..." onZoom={onZoom} />}
+                        {tab === 'levels' && <div className="space-y-4">{pages.map((p, i) => (<div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex items-center justify-between shadow-sm"><div className="flex items-center gap-3 overflow-hidden"><span className="bg-zinc-800 text-zinc-500 w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm shrink-0">{i+1}</span><div className="min-w-0"><h3 className="font-bold truncate text-sm">{p.title || 'Sans titre'}</h3></div></div><div className="flex gap-1 items-center"><div className="flex flex-col mr-1"><button onClick={() => movePage(i, -1)} disabled={i === 0} className="text-zinc-600 hover:text-white disabled:opacity-20"><Icons.ArrowUp size={14}/></button><button onClick={() => movePage(i, 1)} disabled={i === pages.length - 1} className="text-zinc-600 hover:text-white disabled:opacity-20"><Icons.ArrowDown size={14}/></button></div><button onClick={() => setEditingPage(p)} className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg"><Icons.Edit3 size={16}/></button><button onClick={() => { if (confirm("Supprimer ?")) setPages(pages.filter(x => x.id !== p.id)); }} className="p-2 bg-red-500/10 text-red-400 rounded-lg"><Icons.Trash2 size={16}/></button></div></div>))}<button onClick={() => setEditingPage({ id: null, title:'', content:'', answer:'', answerMode: 'single', hint:'', hintPenalty:60, solutionPenalty:120, wrongPenalty:60, images:[], audios: [] })} className="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg z-30"><Icons.Plus size={28} /></button></div>}
                         {tab === 'export' && <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-center space-y-4"><button onClick={handleExportJson} className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 rounded-lg font-bold flex items-center justify-center text-white"><Icons.FileJson className="mr-2" size={20}/> Exporter JSON</button><button onClick={handleNewScenario} className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 text-sm border border-zinc-700">Nouveau Scénario Vierge</button></div>}
                     </div>
                 </div>
             );
         }
 
-        function FinishView({ settings, isWin, timer, penalty, onHome }) {
+        function FinishView({ settings, isWin, timer, penalty, onHome, onZoom, isOvertime }) {
             const timeUsed = settings.initialTime - timer;
-            const [zoomedImage, setZoomedImage] = useState(null);
             return (
                 <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
                     <div className="w-full max-w-sm space-y-6">
                         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl relative">
                             <div className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center ${isWin ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>{isWin ? <Icons.CheckCircle size={48} /> : <Icons.AlertCircle size={48} />}</div>
                             <div className="space-y-2"><h2 className="text-2xl font-bold text-white">{isWin ? settings.victoryTitle : "Échec"}</h2></div>
-                            <ImageGallery images={settings.victoryImages} onZoom={setZoomedImage} />
-                            <div className="max-h-40 overflow-y-auto px-2 scrollbar-thin scrollbar-thumb-zinc-700"><p className="text-zinc-400 text-sm whitespace-pre-wrap break-words leading-relaxed max-w-[80%] mx-auto">{isWin && settings.victoryContent ? settings.victoryContent : (isWin ? "Bravo !" : "Temps écoulé.")}</p></div>
-                            {isWin && <div className="bg-zinc-950 rounded-2xl p-4 space-y-2 border border-zinc-800/50 text-sm"><div className="flex justify-between"><span className="text-zinc-500">Temps</span><span className="text-white font-mono">{Math.floor(timeUsed/60)}m {timeUsed%60}s</span></div><div className="flex justify-between"><span className="text-zinc-500">Pénalités</span><span className="text-red-400 font-mono">+{penalty}s</span></div><div className="h-px bg-zinc-800 my-2" /><div className="flex justify-between font-bold"><span className="text-zinc-300">Total</span><span className="text-emerald-400 font-mono">{Math.floor((timeUsed + penalty)/60)}m {(timeUsed + penalty)%60}s</span></div></div>}
+                            <ImageGallery images={settings.victoryImages} onZoom={onZoom} />
+                            <div className="max-h-40 overflow-y-auto px-2 scrollbar-thin scrollbar-thumb-zinc-700"><div className="text-zinc-400 text-sm whitespace-pre-wrap break-words leading-relaxed max-w-[80%] mx-auto"><HtmlText content={isWin && settings.victoryContent ? settings.victoryContent : (isWin ? "Bravo !" : "Temps écoulé.")} /></div></div>
+                            {isWin && (
+                                <div className="bg-zinc-950 rounded-2xl p-4 space-y-2 border border-zinc-800/50 text-sm">
+                                    <div className="flex justify-between"><span className="text-zinc-500">Temps</span><span className="text-white font-mono">{Math.floor(Math.abs(settings.initialTime - timer - penalty)/60)}m {Math.abs(settings.initialTime - timer - penalty)%60}s</span></div>
+                                    <div className="flex justify-between"><span className="text-zinc-500">Pénalités</span><span className="text-red-400 font-mono">+{penalty}s</span></div>
+                                    <div className="h-px bg-zinc-800 my-2" />
+                                    <div className="flex justify-between font-bold">
+                                        <span className="text-zinc-300">Total</span>
+                                        <span className={`font-mono ${isOvertime ? 'text-red-500' : 'text-emerald-400'}`}>
+                                            {Math.floor(Math.abs(settings.initialTime - timer)/60)}m {Math.abs(settings.initialTime - timer)%60}s
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                             <button onClick={onHome} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-4 rounded-xl font-bold">Retour Menu</button>
                         </div>
                     </div>
-                    {zoomedImage && <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-2" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain" alt="Zoom" /><button className="absolute top-6 right-6 bg-zinc-800 p-2 rounded-full text-white"><Icons.X size={24} /></button></div>}
                 </div>
             );
         }
@@ -613,13 +1016,7 @@
         }
 
         const root = createRoot(document.getElementById('root'));
-        
-        // Wrap avec Error Boundary pour éviter l'écran blanc
-        root.render(
-            <ErrorBoundary>
-                <App />
-            </ErrorBoundary>
-        );
+        root.render(<App />);
     </script>
 </body>
 </html>
