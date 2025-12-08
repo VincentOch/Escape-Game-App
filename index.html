@@ -34,18 +34,19 @@
         .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
         .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #3f3f46; border-radius: 20px; }
 
-        /* Styles pour le texte riche */
+        /* Styles pour le texte riche (support natif execCommand) */
         .rich-text b, .rich-text strong { font-weight: 700; color: #fff; }
         .rich-text i, .rich-text em { font-style: italic; }
         .rich-text u { text-decoration: underline; text-decoration-color: #a78bfa; text-decoration-thickness: 2px; }
         
-        .rich-text font[color="#f87171"], .rich-text span[style*="rgb(248, 113, 113)"] { color: #f87171 !important; }
-        .rich-text font[color="#60a5fa"], .rich-text span[style*="rgb(96, 165, 250)"] { color: #60a5fa !important; }
-        .rich-text font[color="#4ade80"], .rich-text span[style*="rgb(74, 222, 128)"] { color: #4ade80 !important; }
-        .rich-text font[color="#facc15"], .rich-text span[style*="rgb(250, 204, 21)"] { color: #facc15 !important; }
+        /* Forcer les couleurs générées par execCommand */
+        .rich-text font[color="#f87171"] { color: #f87171 !important; }
+        .rich-text font[color="#60a5fa"] { color: #60a5fa !important; }
+        .rich-text font[color="#4ade80"] { color: #4ade80 !important; }
+        .rich-text font[color="#facc15"] { color: #facc15 !important; }
 
         /* Audio Player Customization */
-        audio { height: 36px; border-radius: 8px; width: 100%; }
+        audio { height: 40px; border-radius: 8px; width: 100%; }
         audio::-webkit-media-controls-panel { background-color: #27272a; }
         audio::-webkit-media-controls-current-time-display,
         audio::-webkit-media-controls-time-remaining-display { color: #fff; }
@@ -130,7 +131,7 @@
                             <Icons.AlertTriangle size={64} className="mb-4" />
                             <h1 className="text-2xl font-bold mb-2">Une erreur est survenue</h1>
                             <p className="mb-6 text-zinc-400 max-w-md bg-zinc-900 p-4 rounded text-xs font-mono text-left overflow-auto">{this.state.error?.toString()}</p>
-                            <button onClick={() => { localStorage.removeItem('escape_game_v3_multianswer'); window.location.reload(); }} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-500 transition-colors">Réinitialiser les données</button>
+                            <button onClick={() => { localStorage.removeItem('escape_game_production_v2'); window.location.reload(); }} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-500 transition-colors">Réinitialiser les données</button>
                         </div>
                     );
                 }
@@ -219,35 +220,55 @@
         };
 
         const RichTextEditor = ({ value, onChange, placeholder, rows=4 }) => {
-            const insertTag = (startTag, endTag) => {
-                const textarea = document.activeElement;
-                if (!textarea || textarea.tagName !== 'TEXTAREA') return;
-                const start = textarea.selectionStart;
-                const end = textarea.selectionEnd;
-                const text = textarea.value;
-                const newValue = text.substring(0, start) + startTag + text.substring(start, end) + endTag + text.substring(end);
-                onChange({ target: { value: newValue } });
-                setTimeout(() => { textarea.focus(); textarea.setSelectionRange(start + startTag.length, end + startTag.length); }, 0);
+            const editorRef = useRef(null);
+
+            // Synchronisation au montage uniquement
+            useEffect(() => {
+                if (editorRef.current && editorRef.current.innerHTML !== value) {
+                    if (document.activeElement !== editorRef.current) {
+                        editorRef.current.innerHTML = value || "";
+                    }
+                }
+            }, [value]);
+
+            const exec = (command, arg = null) => {
+                document.execCommand(command, false, arg);
+                editorRef.current.focus();
+                handleInput();
+            };
+
+            const handleInput = () => {
+                if (editorRef.current && onChange) {
+                    onChange({ target: { value: editorRef.current.innerHTML } });
+                }
             };
 
             return (
-                <div className="flex flex-col gap-1">
-                    <div className="flex gap-1 bg-zinc-900 p-1 rounded-t-lg border border-zinc-700 border-b-0">
-                        <button type="button" onClick={() => insertTag('<b>', '</b>')} className="p-1 hover:bg-zinc-700 rounded text-zinc-300 font-bold" title="Gras"><Icons.Bold size={16}/></button>
-                        <button type="button" onClick={() => insertTag('<i>', '</i>')} className="p-1 hover:bg-zinc-700 rounded text-zinc-300 italic" title="Italique"><Icons.Italic size={16}/></button>
-                        <button type="button" onClick={() => insertTag('<u>', '</u>')} className="p-1 hover:bg-zinc-700 rounded text-zinc-300 underline" title="Souligné"><Icons.Underline size={16}/></button>
-                        <div className="w-px bg-zinc-700 mx-1"></div>
-                        <button type="button" onClick={() => insertTag('<span class="text-red">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-red-500" title="Rouge"><div class="w-4 h-4 bg-red-500 rounded-full"></div></button>
-                        <button type="button" onClick={() => insertTag('<span class="text-blue">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-blue-400" title="Bleu"><div class="w-4 h-4 bg-blue-400 rounded-full"></div></button>
-                        <button type="button" onClick={() => insertTag('<span class="text-green">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-green-400" title="Vert"><div class="w-4 h-4 bg-green-400 rounded-full"></div></button>
-                        <button type="button" onClick={() => insertTag('<span class="text-yellow">', '</span>')} className="p-1 hover:bg-zinc-700 rounded text-yellow-400" title="Jaune"><div class="w-4 h-4 bg-yellow-400 rounded-full"></div></button>
+                <div className="flex flex-col gap-1 rounded-lg overflow-hidden border border-zinc-700 focus-within:border-indigo-500 transition-colors">
+                    <div className="flex gap-1 bg-zinc-900 p-2 border-b border-zinc-700 items-center flex-wrap">
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('bold');}} className="p-1.5 hover:bg-zinc-700 rounded text-zinc-300" title="Gras"><Icons.Bold size={16}/></button>
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('italic');}} className="p-1.5 hover:bg-zinc-700 rounded text-zinc-300" title="Italique"><Icons.Italic size={16}/></button>
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('underline');}} className="p-1.5 hover:bg-zinc-700 rounded text-zinc-300" title="Souligné"><Icons.Underline size={16}/></button>
+                        <div className="w-px h-4 bg-zinc-700 mx-1"></div>
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('foreColor', '#f87171');}} className="p-1.5 hover:bg-zinc-700 rounded" title="Rouge"><div className="w-3 h-3 bg-red-500 rounded-full"></div></button>
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('foreColor', '#60a5fa');}} className="p-1.5 hover:bg-zinc-700 rounded" title="Bleu"><div className="w-3 h-3 bg-blue-400 rounded-full"></div></button>
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('foreColor', '#4ade80');}} className="p-1.5 hover:bg-zinc-700 rounded" title="Vert"><div class="w-3 h-3 bg-green-400 rounded-full"></div></button>
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('foreColor', '#facc15');}} className="p-1.5 hover:bg-zinc-700 rounded" title="Jaune"><div class="w-3 h-3 bg-yellow-400 rounded-full"></div></button>
+                        <div className="w-px h-4 bg-zinc-700 mx-1"></div>
+                        <button type="button" onMouseDown={(e) => {e.preventDefault(); exec('removeFormat');}} className="p-1.5 hover:bg-zinc-700 rounded text-zinc-500 text-xs" title="Nettoyer">Reset</button>
                     </div>
-                    <textarea className="w-full bg-zinc-950 border border-zinc-700 p-3 rounded-b-lg text-white font-sans text-sm focus:border-indigo-500 outline-none" rows={rows} value={value} onChange={onChange} placeholder={placeholder} />
+                    <div 
+                        ref={editorRef}
+                        contentEditable
+                        onInput={handleInput}
+                        className="w-full bg-zinc-950 p-3 text-white font-sans text-sm outline-none min-h-[100px] max-h-[300px] overflow-y-auto rich-text"
+                        style={{whiteSpace: 'pre-wrap'}}
+                    ></div>
                 </div>
             );
         };
 
-        // Improved Lightbox: Mobile friendly zoom/pan
+        // Improved Lightbox
         const Lightbox = ({ src, onClose }) => {
             const [scale, setScale] = useState(false);
 
@@ -256,27 +277,22 @@
                     className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center"
                     onClick={onClose}
                 >
-                    {/* Scroll Container */}
                     <div 
                         className={`w-full h-full flex ${scale ? 'items-start justify-start overflow-auto' : 'items-center justify-center overflow-hidden'}`}
-                        onClick={(e) => { if(scale) e.stopPropagation(); }} // Allow scrolling without closing
+                        onClick={(e) => { if(scale) e.stopPropagation(); }}
                     >
                         <img 
                             src={src} 
                             className={`transition-all duration-300 ${
                                 scale 
-                                ? 'min-w-[200%] h-auto object-cover cursor-zoom-out' // Force large width to simulate zoom
+                                ? 'min-w-[200%] h-auto object-cover cursor-zoom-out'
                                 : 'max-w-full max-h-screen object-contain cursor-zoom-in'
                             }`}
                             alt="Zoom" 
                             onClick={(e) => { e.stopPropagation(); setScale(!scale); }}
                         />
                     </div>
-
-                    <button className="absolute top-4 right-4 bg-zinc-800 p-2 rounded-full text-white z-[110] pointer-events-auto" onClick={onClose}>
-                        <Icons.X size={24} />
-                    </button>
-                    
+                    <button className="absolute top-4 right-4 bg-zinc-800 p-2 rounded-full text-white z-[110] pointer-events-auto" onClick={onClose}><Icons.X size={24} /></button>
                     {!scale && <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/80 text-xs bg-black/50 px-3 py-1 rounded-full pointer-events-none">Toucher pour zoomer</div>}
                 </div>
             );
@@ -396,15 +412,15 @@
                 hintsUnlocked: [], 
                 answersUnlocked: [], 
                 showConfetti: false,
-                timeOutHandled: false // Nouvelle prop pour la modale de fin de temps
+                timeOutHandled: false
             });
             const [isScenarioLoaded, setIsScenarioLoaded] = useState(false);
             const [showQuitModal, setShowQuitModal] = useState(false);
-            const [showTimeoutModal, setShowTimeoutModal] = useState(false); // Modale Temps Écoulé
-            const [zoomedImage, setZoomedImage] = useState(null); // Lifted state for global zoom
+            const [showTimeoutModal, setShowTimeoutModal] = useState(false); 
+            const [zoomedImage, setZoomedImage] = useState(null); 
 
-            // Nouvel état pour le localStorage key pour forcer un reset si besoin
-            const STORAGE_KEY = 'escape_game_v3_multianswer';
+            // Clé V2 pour reset complet
+            const STORAGE_KEY = 'escape_game_production_v2';
 
             useEffect(() => {
                 const savedData = localStorage.getItem(STORAGE_KEY); 
@@ -418,10 +434,10 @@
                                 let audios = p.audios || (p.audioUrl ? [{url: p.audioUrl, name: 'Audio 1'}] : []);
                                 return { 
                                     ...p, 
-                                    images: imgs,
+                                    images: imgs, 
                                     audios: audios,
                                     solutionPenalty: p.solutionPenalty || (p.hintPenalty ? p.hintPenalty * 2 : 120),
-                                    answerMode: p.answerMode || 'single' // 'single' (OU) ou 'all' (ET)
+                                    answerMode: p.answerMode || 'single' 
                                 };
                             });
                             setSettings({...settings, ...parsed.settings}); 
@@ -448,7 +464,6 @@
                     interval = setInterval(() => {
                         setGameState(prev => {
                             if (prev.timer <= 1 && !prev.timeOutHandled) { 
-                                // Pause à 0 pour afficher la modale
                                 setShowTimeoutModal(true);
                                 return { ...prev, timer: 0, timeOutHandled: true, isRunning: false }; 
                             }
@@ -508,7 +523,7 @@
                                 let audios = p.audios || (p.audioUrl ? [{url: p.audioUrl, name: 'Audio 1'}] : []);
                                 return { 
                                     ...p, 
-                                    images: imgs,
+                                    images: imgs, 
                                     audios: audios,
                                     solutionPenalty: p.solutionPenalty || 120,
                                     answerMode: p.answerMode || 'single'
@@ -524,7 +539,6 @@
                 reader.readAsText(file);
             };
             
-            // Pas de Math.max(0, ...) pour autoriser les temps négatifs
             const unlockHint = (pageId, penalty) => setGameState(prev => ({ ...prev, hintsUnlocked: [...prev.hintsUnlocked, pageId], timer: prev.timer - penalty, penaltyTotal: prev.penaltyTotal + penalty }));
             const unlockAnswer = (pageId, penalty) => setGameState(prev => ({ ...prev, answersUnlocked: [...prev.answersUnlocked, pageId], timer: prev.timer - penalty, penaltyTotal: prev.penaltyTotal + penalty }));
             const applyWrongAnswerPenalty = (penalty) => setGameState(prev => ({ ...prev, timer: prev.timer - penalty, penaltyTotal: prev.penaltyTotal + penalty }));
@@ -622,8 +636,8 @@
                             <div className="space-y-4 text-sm text-zinc-300">
                                 <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.Clock size={20} className="text-emerald-400"/></div><div><p className="font-bold text-white">Le Temps est Compté</p><p>Vous avez un temps limité pour finir l'aventure. Chaque seconde compte !</p></div></div>
                                 <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.AlertTriangle size={20} className="text-red-400"/></div><div><p className="font-bold text-white">Attention aux Erreurs</p><p>Chaque mauvaise réponse vous enlèvera du temps précieux.</p></div></div>
-                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.Layout size={20} className="text-blue-400"/></div><div><p className="font-bold text-white">Indices Visuels</p><p>Les images <strong>au-dessus</strong> du texte sont pour l'ambiance.<br/>Les images <strong>en-dessous</strong> du texte font partie de l'énigme. De même avec les sons.</p></div></div>
-                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.ListChecks size={20} className="text-purple-400"/></div><div><p className="font-bold text-white">Types de Réponses</p><p>Si un compteur (format 0/X) est présent, plusieurs réponses sont attendues. Il suffit de les entrer les unes après les autres (à chaque réponse, appuyer sur valider)</p><p>Sans compteur, il suffit simplement de rentrer une réponse, plusieurs peuvent être possibles en fonction des questions.</p></div></div>
+                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.Layout size={20} className="text-blue-400"/></div><div><p className="font-bold text-white">Indices Visuels</p><p>Les images <strong>au-dessus</strong> du texte sont pour l'ambiance (Lore).<br/>Les images <strong>en-dessous</strong> du texte font partie de l'énigme.</p></div></div>
+                                <div className="flex gap-3"><div className="bg-zinc-800 p-2 rounded h-fit"><Icons.ListChecks size={20} className="text-purple-400"/></div><div><p className="font-bold text-white">Types de Réponses</p><p>Pas de compteur ? Une seule bonne réponse suffit.</p><p>Compteur (ex: 0/3) ? Vous devez trouver <strong>toutes</strong> les réponses.</p></div></div>
                             </div>
                         </div>
                         <button onClick={onNext} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white shadow-lg active:scale-95 transition-all">J'AI COMPRIS</button>
@@ -656,7 +670,6 @@
             const [input, setInput] = useState('');
             const [errorShake, setErrorShake] = useState(false);
             const [penaltyFlash, setPenaltyFlash] = useState(null);
-            const [zoomedImage, setZoomedImage] = useState(null);
             const [modalType, setModalType] = useState(null); 
             const [foundAnswers, setFoundAnswers] = useState([]);
 
@@ -787,7 +800,6 @@
                     </div>
                     <Modal isOpen={modalType === 'hint'} title="Débloquer l'indice ?" confirmText={`Oui, perdre ${page.hintPenalty || 60}s`} confirmColor="bg-amber-600" onCancel={() => setModalType(null)} onConfirm={() => { onUnlockHint(page.id, page.hintPenalty || 60); setModalType(null); }} cancelText="Annuler"><p>Êtes-vous sûr de vouloir un indice ? Cela retirera du temps à votre chrono.</p></Modal>
                     <Modal isOpen={modalType === 'answer'} title="Abandonner cette étape ?" confirmText={`Révéler (-${page.solutionPenalty || 120}s)`} confirmColor="bg-red-600" onCancel={() => setModalType(null)} onConfirm={() => { onUnlockAnswer(page.id, page.solutionPenalty || 120); setModalType(null); }} cancelText="Annuler"><p>Cela affichera la réponse exacte mais vous coûtera une pénalité fixe.</p></Modal>
-                    {zoomedImage && <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-2" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain" alt="Zoom" /><button className="absolute top-6 right-6 bg-zinc-800 p-2 rounded-full text-white"><Icons.X size={24} /></button></div>}
                 </div>
             );
         }
